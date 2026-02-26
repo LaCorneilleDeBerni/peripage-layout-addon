@@ -282,34 +282,65 @@ def compose_page(blocks: list) -> tuple:
 # ──────────────────────────────────────────────
 # Impression Bluetooth
 # ──────────────────────────────────────────────
+def _crc8(data: bytes) -> int:
+    """CRC-8 utilisé par le protocole PeriPage."""
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x80:
+                crc = (crc << 1) ^ 0x07
+            else:
+                crc <<= 1
+            crc &= 0xFF
+    return crc
+
+
+def _make_packet(cmd: int, payload: bytes = b'') -> bytes:
+    """
+    Construit un paquet protocole PeriPage A6.
+    Format : 0x51 0x78 <cmd> 0x00 <len_lo> <len_hi> <payload> <crc> 0xFF
+    """
+    length = len(payload)
+    header = bytes([0x51, 0x78, cmd, 0x00,
+                    length & 0xFF, (length >> 8) & 0xFF])
+    crc = _crc8(payload) if payload else 0x00
+    return header + payload + bytes([crc, 0xFF])
+
+
 def _image_to_printer_bytes(image: Image.Image) -> bytes:
     """
     Convertit une image PIL en bytes protocole PeriPage A6.
-    Chaque ligne = 48 bytes (384px / 8), préfixée d'un header propriétaire.
+    Protocole issu du reverse engineering de Elias Weingärtner / bitrate16.
     """
-    img = image.convert("1")
+    # Redimensionner à PRINT_WIDTH en niveaux de gris puis 1-bit
+    img = image.convert("L")
     w, h = img.size
     if w != PRINT_WIDTH:
         new_h = int(h * PRINT_WIDTH / w)
         img = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
         w, h = img.size
 
-    BYTES_PER_LINE = PRINT_WIDTH // 8  # 48
+    # Convertir en 1-bit avec dithering Floyd-Steinberg
+    img = img.convert("1", dither=Image.FLOYDSTEINBERG)
+
+    BYTES_PER_LINE = PRINT_WIDTH // 8  # 48 bytes
     data = bytearray()
 
-    # Commande : début impression
-    data += bytes([0x51, 0x78, 0xA3, 0x00, 0x01, 0x00, 0x00, 0x00, 0xFF])
+    # Paquet : début impression (cmd 0xA3, payload = nombre de lignes sur 2 bytes)
+    data += _make_packet(0xA3, bytes([h & 0xFF, (h >> 8) & 0xFF]))
 
+    # Lignes bitmap
     for y in range(h):
         line_bytes = bytearray(BYTES_PER_LINE)
         for x in range(PRINT_WIDTH):
+            # PIL 1-bit : 0 = noir, 255 = blanc — inverser pour l'imprimante
             if img.getpixel((x, y)) == 0:
                 line_bytes[x // 8] |= (0x80 >> (x % 8))
-        data += bytes([0x51, 0x78, 0xA3, 0x00, BYTES_PER_LINE, 0x00, 0x00, 0x00, 0xFF])
-        data += bytes(line_bytes)
+        data += _make_packet(0xA4, bytes(line_bytes))
 
-    # Commande : avance papier (50 lignes)
-    data += bytes([0x51, 0x78, 0xAE, 0x00, 0x02, 0x00, 0x32, 0x00, 0xFF])
+    # Paquet : avance papier (cmd 0xAE, 50 lignes)
+    data += _make_packet(0xAE, bytes([0x00, 50]))
 
     return bytes(data)
 
