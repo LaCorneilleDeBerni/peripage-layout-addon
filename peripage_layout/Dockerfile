@@ -7,16 +7,7 @@ RUN apk add --no-cache \
     py3-pillow \
     bluez \
     bluez-libs \
-    ttf-dejavu \
-    gcc \
-    musl-dev \
-    python3-dev \
-    jpeg-dev \
-    zlib-dev \
-    freetype-dev
-
-COPY requirements.txt /tmp/
-RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+    ttf-dejavu
 
 COPY run.sh /
 COPY layout_service.py /
