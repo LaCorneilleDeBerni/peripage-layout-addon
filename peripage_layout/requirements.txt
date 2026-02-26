@@ -1,1 +1,4 @@
-peripage
+# Aucune dépendance pip requise
+# Pillow installé via py3-pillow (Alpine)
+# Bluetooth via socket natif Python (AF_BLUETOOTH / RFCOMM)
+
