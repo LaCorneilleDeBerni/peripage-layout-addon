@@ -513,3 +513,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+import glob
+found = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
+for f in found:
+    log.info(f"FONT TROUVÉE : {f}")
+if not found:
+    log.warning("Aucune police .ttf trouvée sur le système")
