@@ -51,10 +51,10 @@ log = logging.getLogger("peripage-layout")
 # Polices
 # ──────────────────────────────────────────────
 FONT_MAP = {
-    "DejaVu":     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "DejaVuBold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "Liberation": "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "FreeSans":   "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "Liberation": "/usr/share/fonts/dejavu/DejaVuSans.ttf",   # fallback DejaVu
+    "FreeSans":   "/usr/share/fonts/dejavu/DejaVuSans.ttf",   # fallback DejaVu
 }
 
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
