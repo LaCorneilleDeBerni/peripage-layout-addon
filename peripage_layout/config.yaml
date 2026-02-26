@@ -24,7 +24,4 @@ schema:
   font: list(DejaVu|DejaVuBold|Liberation|FreeSans)
   font_size: int
   port: int
-ports:
-  8766/tcp: 8766
-ports_description:
-  8766/tcp: "Serveur HTTP Layout"
+
