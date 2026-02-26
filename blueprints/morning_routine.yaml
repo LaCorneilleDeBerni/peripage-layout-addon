@@ -1,0 +1,151 @@
+# ============================================================
+# BLUEPRINT — Routine du matin PeriPage
+# ============================================================
+# Scénario : impression quotidienne d'une page personnalisée
+# contenant une image, une phrase d'encouragement, les RDV
+# du jour et une phrase finale affectueuse.
+#
+# PRÉREQUIS :
+#   1. L'addon PeriPage Layout installé et configuré
+#   2. Trois helpers à créer dans HA (Settings > Helpers) :
+#
+#      input_number.peripage_image_count
+#        Type : Number | Min : 1 | Max : 9999 | Step : 1
+#        → Nombre total d'images dans votre dossier /config/www/images/
+#
+#      input_select.peripage_encouragements
+#        Type : Select
+#        → Ajoutez vos phrases d'encouragement comme options
+#        Exemples :
+#          - "Une chose à la fois, et ça avance !"
+#          - "Tu n'as pas besoin d'être parfait·e."
+#          - "Chaque petit pas compte. Vraiment."
+#
+#      input_select.peripage_closings
+#        Type : Select
+#        → Ajoutez vos phrases finales comme options
+#        Exemples :
+#          - "Bonne journée 💙"
+#          - "Tu es aimé·e, exactement comme tu es."
+#          - "Vas-y à ton rythme."
+#
+#   3. Vos images nommées avec un numéro sur 5 chiffres :
+#      image00001.png, image00002.png, ...
+#      placées dans /config/www/images/
+#
+#   4. Le rest_command ci-dessous dans configuration.yaml
+#
+# ============================================================
+
+
+# ── À ajouter dans configuration.yaml ──────────────────────
+
+rest_command:
+  peripage_print:
+    url: "http://YOUR_HA_IP:8766/print"
+    method: POST
+    content_type: "application/json"
+    payload: "{{ payload }}"
+
+
+# ── Script HA ───────────────────────────────────────────────
+
+script:
+  peripage_routine_matin:
+    alias: "PeriPage — Routine du matin"
+    description: >
+      Imprime une page personnalisée : image aléatoire,
+      phrase d'encouragement, RDV du jour, phrase finale.
+    mode: single
+
+    sequence:
+
+      # Étape 1 — Image aléatoire
+      - variables:
+          image_num: >
+            {{ range(1, (states('input_number.peripage_image_count') | int) + 1)
+               | list | random }}
+          image_url: >
+            {{ 'http://YOUR_HA_IP:8123/local/images/image'
+               ~ (image_num | string).zfill(5) ~ '.png' }}
+
+      # Étape 2 — Phrase d'encouragement aléatoire
+      - variables:
+          encouragement: >
+            {% set opts = state_attr('input_select.peripage_encouragements', 'options') %}
+            {{ opts | random }}
+
+      # Étape 3 — Phrase finale aléatoire
+      - variables:
+          closing: >
+            {% set opts = state_attr('input_select.peripage_closings', 'options') %}
+            {{ opts | random }}
+
+      # Étape 4 — RDV du jour depuis les calendriers
+      # Adaptez la liste des calendriers à vos entités
+      - variables:
+          rdv_list: >
+            {% set calendars = [
+              'calendar.mon_calendrier',
+              'calendar.calendrier_pro'
+            ] %}
+            {% set ns = namespace(rdvs=[]) %}
+            {% for cal in calendars %}
+              {% if states(cal) == 'on' %}
+                {% set title = state_attr(cal, 'message') | default('RDV') %}
+                {% set start = state_attr(cal, 'start_time') | default('') %}
+                {% if start %}
+                  {% set heure = start[11:16] %}
+                  {% set ns.rdvs = ns.rdvs + [heure ~ ' - ' ~ title] %}
+                {% else %}
+                  {% set ns.rdvs = ns.rdvs + [title] %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.rdvs }}
+
+      # Étape 5 — Fallback si aucun RDV
+      - variables:
+          appointments: >
+            {% if rdv_list | length == 0 %}
+              {{ ["Aucun RDV aujourd'hui — profitez-en !"] }}
+            {% else %}
+              {{ rdv_list | sort }}
+            {% endif %}
+
+      # Étape 6 — Construction du payload et impression
+      - service: rest_command.peripage_print
+        data:
+          payload: >
+            {
+              "blocks": [
+                { "type": "image_url", "url": "{{ image_url }}" },
+                { "type": "separator" },
+                { "type": "text",
+                  "text": "{{ encouragement }}",
+                  "align": "center",
+                  "font_size": 22 },
+                { "type": "separator" },
+                { "type": "title", "text": "Aujourd'hui" },
+                { "type": "list", "items": {{ appointments | tojson }} },
+                { "type": "separator" },
+                { "type": "text",
+                  "text": "{{ closing }}",
+                  "align": "center" }
+              ]
+            }
+
+
+# ── Automation ──────────────────────────────────────────────
+
+automation:
+  - id: "peripage_routine_matin"
+    alias: "PeriPage — Impression 7h00"
+    description: "Déclenche la routine du matin chaque jour à 7h"
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    condition: []
+    action:
+      - service: script.peripage_routine_matin
+    mode: single
