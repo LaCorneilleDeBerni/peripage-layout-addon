@@ -282,21 +282,62 @@ def compose_page(blocks: list) -> tuple:
 # ──────────────────────────────────────────────
 # Impression Bluetooth
 # ──────────────────────────────────────────────
+def _image_to_printer_bytes(image: Image.Image) -> bytes:
+    """
+    Convertit une image PIL en bytes protocole PeriPage A6.
+    Chaque ligne = 48 bytes (384px / 8), préfixée d'un header propriétaire.
+    """
+    img = image.convert("1")
+    w, h = img.size
+    if w != PRINT_WIDTH:
+        new_h = int(h * PRINT_WIDTH / w)
+        img = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
+        w, h = img.size
+
+    BYTES_PER_LINE = PRINT_WIDTH // 8  # 48
+    data = bytearray()
+
+    # Commande : début impression
+    data += bytes([0x51, 0x78, 0xA3, 0x00, 0x01, 0x00, 0x00, 0x00, 0xFF])
+
+    for y in range(h):
+        line_bytes = bytearray(BYTES_PER_LINE)
+        for x in range(PRINT_WIDTH):
+            if img.getpixel((x, y)) == 0:
+                line_bytes[x // 8] |= (0x80 >> (x % 8))
+        data += bytes([0x51, 0x78, 0xA3, 0x00, BYTES_PER_LINE, 0x00, 0x00, 0x00, 0xFF])
+        data += bytes(line_bytes)
+
+    # Commande : avance papier (50 lignes)
+    data += bytes([0x51, 0x78, 0xAE, 0x00, 0x02, 0x00, 0x32, 0x00, 0xFF])
+
+    return bytes(data)
+
+
 def _do_print(image: Image.Image) -> dict:
     result = {"success": False, "error": None}
 
     def _thread():
+        import socket
+        sock = None
         try:
-            from peripage import Printer, PrinterModel
-            model = getattr(PrinterModel, PRINTER_MODEL, PrinterModel.A6)
-            p = Printer(PRINTER_MAC, model)
-            p.connect()
-            p.printImage(image)
-            p.feed(50)
-            p.disconnect()
+            printer_bytes = _image_to_printer_bytes(image)
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM,
+                                 socket.BTPROTO_RFCOMM)
+            sock.settimeout(15)
+            sock.connect((PRINTER_MAC, 1))
+            chunk_size = 256
+            for i in range(0, len(printer_bytes), chunk_size):
+                sock.send(printer_bytes[i:i + chunk_size])
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
+        finally:
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
