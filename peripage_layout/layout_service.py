@@ -381,6 +381,7 @@ def _read_json(handler) -> tuple:
     try:
         length = int(handler.headers.get("Content-Length", 0))
         raw    = handler.rfile.read(length)
+        log.info(f"BODY RECU ({length} bytes): {raw[:200]}")
         return json.loads(raw), None
     except json.JSONDecodeError as e:
         return None, f"JSON invalide : {e}"
@@ -482,6 +483,7 @@ def main():
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
 
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", PORT), LayoutHandler)
     try:
         server.serve_forever()
