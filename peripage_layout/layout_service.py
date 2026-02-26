@@ -282,38 +282,13 @@ def compose_page(blocks: list) -> tuple:
 # ──────────────────────────────────────────────
 # Impression Bluetooth
 # ──────────────────────────────────────────────
-def _crc8(data: bytes) -> int:
-    """CRC-8 utilisé par le protocole PeriPage."""
-    crc = 0
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = (crc << 1) ^ 0x07
-            else:
-                crc <<= 1
-            crc &= 0xFF
-    return crc
-
-
-def _make_packet(cmd: int, payload: bytes = b'') -> bytes:
-    """
-    Construit un paquet protocole PeriPage A6.
-    Format : 0x51 0x78 <cmd> 0x00 <len_lo> <len_hi> <payload> <crc> 0xFF
-    """
-    length = len(payload)
-    header = bytes([0x51, 0x78, cmd, 0x00,
-                    length & 0xFF, (length >> 8) & 0xFF])
-    crc = _crc8(payload) if payload else 0x00
-    return header + payload + bytes([crc, 0xFF])
-
-
 def _image_to_printer_bytes(image: Image.Image) -> bytes:
     """
     Convertit une image PIL en bytes protocole PeriPage A6.
-    Protocole issu du reverse engineering de Elias Weingärtner / bitrate16.
+    Protocole : SPP RFCOMM, format Peripage natif.
+    Header ligne : 0x1D 0x76 0x30 0x00 <w_lo> <w_hi> <h_lo> <h_hi>
+    suivi des bytes bitmap (1 bit par pixel, MSB en premier).
     """
-    # Redimensionner à PRINT_WIDTH en niveaux de gris puis 1-bit
     img = image.convert("L")
     w, h = img.size
     if w != PRINT_WIDTH:
@@ -321,26 +296,30 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
         img = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
         w, h = img.size
 
-    # Convertir en 1-bit avec dithering Floyd-Steinberg
     img = img.convert("1", dither=Image.FLOYDSTEINBERG)
 
-    BYTES_PER_LINE = PRINT_WIDTH // 8  # 48 bytes
+    BYTES_PER_LINE = PRINT_WIDTH // 8  # 48
+
+    # Commande ESC/POS raster bitmap :
+    # GS v 0 — impression bitmap raster
+    # 0x1D 0x76 0x30 0x00 <xL> <xH> <yL> <yH> <data>
+    xL = BYTES_PER_LINE & 0xFF
+    xH = (BYTES_PER_LINE >> 8) & 0xFF
+    yL = h & 0xFF
+    yH = (h >> 8) & 0xFF
+
     data = bytearray()
+    data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
 
-    # Paquet : début impression (cmd 0xA3, payload = nombre de lignes sur 2 bytes)
-    data += _make_packet(0xA3, bytes([h & 0xFF, (h >> 8) & 0xFF]))
-
-    # Lignes bitmap
     for y in range(h):
         line_bytes = bytearray(BYTES_PER_LINE)
         for x in range(PRINT_WIDTH):
-            # PIL 1-bit : 0 = noir, 255 = blanc — inverser pour l'imprimante
-            if img.getpixel((x, y)) == 0:
+            if img.getpixel((x, y)) == 0:  # noir
                 line_bytes[x // 8] |= (0x80 >> (x % 8))
-        data += _make_packet(0xA4, bytes(line_bytes))
+        data += bytes(line_bytes)
 
-    # Paquet : avance papier (cmd 0xAE, 50 lignes)
-    data += _make_packet(0xAE, bytes([0x00, 50]))
+    # Avance papier : ESC d n (n lignes)
+    data += bytes([0x1B, 0x64, 0x04])
 
     return bytes(data)
 
@@ -502,14 +481,6 @@ def main():
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
-    # Diagnostic polices
-    import glob
-    found = sorted(glob.glob("/usr/share/fonts/**/*.ttf", recursive=True))
-    if found:
-        for f in found:
-            log.info(f"FONT: {f}")
-    else:
-        log.warning("Aucune police .ttf trouvée sur le système")
 
     server = ThreadingHTTPServer(("0.0.0.0", PORT), LayoutHandler)
     try:
