@@ -502,6 +502,15 @@ def main():
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
+    # Diagnostic polices
+    import glob
+    found = sorted(glob.glob("/usr/share/fonts/**/*.ttf", recursive=True))
+    if found:
+        for f in found:
+            log.info(f"FONT: {f}")
+    else:
+        log.warning("Aucune police .ttf trouvée sur le système")
+
     server = ThreadingHTTPServer(("0.0.0.0", PORT), LayoutHandler)
     try:
         server.serve_forever()
@@ -513,10 +522,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-import glob
-found = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
-for f in found:
-    log.info(f"FONT TROUVÉE : {f}")
-if not found:
-    log.warning("Aucune police .ttf trouvée sur le système")
