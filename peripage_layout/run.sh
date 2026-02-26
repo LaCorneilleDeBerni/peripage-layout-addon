@@ -7,9 +7,9 @@ FONT_SIZE=$(bashio::config 'font_size')
 PORT=$(bashio::config 'port')
 
 bashio::log.info "PeriPage Layout — démarrage"
-bashio::log.info "MAC: ${MAC} | Modèle: ${MODEL} | Police: ${FONT} ${FONT_SIZE}px | Port: ${PORT}"
+bashio::log.info "MAC: ${MAC} | Modèle: ${MODEL} | Port: ${PORT}"
 
-trap 'bashio::log.info "Arrêt du service."; kill ${PID}; exit 0' SIGTERM SIGINT
+trap 'bashio::log.info "Arrêt."; kill ${PID}; exit 0' SIGTERM SIGINT
 
 python3 /layout_service.py "${MAC}" "${MODEL}" "${FONT}" "${FONT_SIZE}" "${PORT}" &
 PID=$!
