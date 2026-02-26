@@ -1,0 +1,30 @@
+name: "PeriPage Layout"
+description: "Mise en page et impression sur imprimante thermique PeriPage via Bluetooth"
+version: "1.0.0"
+slug: peripage_layout
+url: "https://github.com/LaCorneilleDeBerni/peripage-layout-addon"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+init: false
+privileged:
+  - NET_ADMIN
+host_network: true
+options:
+  printer_mac: "XX:XX:XX:XX:XX:XX"
+  printer_model: "A6"
+  font: "DejaVu"
+  font_size: 24
+  port: 8766
+schema:
+  printer_mac: str
+  printer_model: list(A6|A6p|A40|A40p)
+  font: list(DejaVu|DejaVuBold|Liberation|FreeSans)
+  font_size: int
+  port: int
+ports:
+  8766/tcp: 8766
+ports_description:
+  8766/tcp: "Serveur HTTP Layout"
