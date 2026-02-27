@@ -58,6 +58,7 @@ FONT_MAP = {
 }
 
 EMOJI_FONT_PATHS = [
+    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
     "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
     "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
     "/usr/share/fonts/NotoEmoji-Regular.ttf",
