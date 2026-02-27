@@ -16,7 +16,6 @@ PRINTER_MODEL    = sys.argv[2]
 FONT_NAME        = sys.argv[3]
 FONT_SIZE        = int(sys.argv[4])
 PORT             = int(sys.argv[5])
-BT_ADAPTER_MAC   = sys.argv[6] if len(sys.argv) > 6 else ""
 PRINT_WIDTH      = 384
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -292,59 +291,44 @@ def compose_page(blocks: list) -> tuple:
         y += img.height
     return page, warnings
 
-def _image_to_printer_bytes(image: Image.Image) -> bytes:
-    img = image.convert("L")
-    w, h = img.size
-    if w != PRINT_WIDTH:
-        new_h = int(h * PRINT_WIDTH / w)
-        img   = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
-        w, h  = img.size
-    img = img.convert("1", dither=Image.FLOYDSTEINBERG)
-    BPL = PRINT_WIDTH // 8
-    xL, xH = BPL & 0xFF, (BPL >> 8) & 0xFF
-    yL, yH = h & 0xFF, (h >> 8) & 0xFF
-    data  = bytearray()
-    data += bytes([0x1B, 0x40])
-    data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
-    for y in range(h):
-        line_bytes = bytearray(BPL)
-        for x in range(PRINT_WIDTH):
-            if img.getpixel((x, y)) == 0:
-                line_bytes[x // 8] |= (0x80 >> (x % 8))
-        data += bytes(line_bytes)
-    data += bytes([0x1B, 0x64, 0x04])
-    return bytes(data)
+MODEL_MAP = {
+    "A6":  "A6",
+    "A6p": "A6p",
+    "A40": "A40",
+    "A40p": "A40p",
+}
 
 def _do_print(image: Image.Image) -> dict:
+    import peripage as pp
     result = {"success": False, "error": None}
+
+    PERIPAGE_MODEL_MAP = {
+        "A6":   pp.PrinterType.A6,
+        "A6p":  pp.PrinterType.A6p,
+        "A40":  pp.PrinterType.A40,
+        "A40p": pp.PrinterType.A40p,
+    }
+
     def _thread():
-        import socket
-        sock = None
         try:
-            printer_bytes = _image_to_printer_bytes(image)
-            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-            sock.settimeout(15)
-            if BT_ADAPTER_MAC:
-                sock.bind((BT_ADAPTER_MAC, 1))
-            sock.connect((PRINTER_MAC, 1))
-            import time
-            log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
-            for i in range(0, len(printer_bytes), 256):
-                sock.send(printer_bytes[i:i + 256])
-                time.sleep(0.05)
+            printer_type = PERIPAGE_MODEL_MAP.get(PRINTER_MODEL, pp.PrinterType.A6)
+            printer = pp.Printer(PRINTER_MAC, printer_type)
+            printer.connect()
+            log.info(f"Connecté via peripage — envoi image {image.width}x{image.height}px")
+            img_rgb = image.convert("RGB")
+            printer.printImage(img_rgb)
+            printer.printBreak(100)
+            printer.disconnect()
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
-            log.error(f"Erreur Bluetooth : {e}")
-        finally:
-            if sock:
-                try: sock.close()
-                except Exception: pass
+            log.error(f"Erreur impression : {e}")
+
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
-    t.join(timeout=30)
+    t.join(timeout=45)
     if t.is_alive():
-        result["error"] = "Timeout Bluetooth (30s)"
+        result["error"] = "Timeout impression (45s)"
     return result
 
 def send_to_printer(image: Image.Image) -> tuple:
