@@ -345,39 +345,51 @@ def _bt_select_adapter():
     except Exception as e:
         log.warning(f"Impossible de sélectionner {BT_ADAPTER} : {e}")
 
+def _bt_cmd(*args, timeout=10) -> str:
+    """Exécute une commande bluetoothctl en mode non-interactif."""
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", *args],
+            capture_output=True, text=True, timeout=timeout
+        )
+        return result.stdout + result.stderr
+    except Exception as e:
+        return str(e)
+
 def _bt_repair():
     """Tente un re-pairing de l'imprimante via bluetoothctl."""
+    import time
     log.info(f"Re-pairing automatique de {PRINTER_MAC}...")
     try:
-        cmds = [
-            f"select {BT_ADAPTER}",
-            f"remove {PRINTER_MAC}",
-            "scan on",
-        ]
-        # Lancer scan 5 secondes pour détecter l'imprimante
-        proc = subprocess.Popen(
-            ["bluetoothctl"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        proc.stdin.write(f"select {BT_ADAPTER}\n")
-        proc.stdin.write(f"remove {PRINTER_MAC}\n")
-        proc.stdin.write("scan on\n")
-        proc.stdin.flush()
-        import time
-        time.sleep(5)
-        proc.stdin.write("scan off\n")
-        proc.stdin.write(f"pair {PRINTER_MAC}\n")
-        proc.stdin.flush()
-        time.sleep(4)
-        proc.stdin.write(f"trust {PRINTER_MAC}\n")
-        proc.stdin.flush()
+        # Sélectionner l'adaptateur
+        _bt_cmd("select", BT_ADAPTER)
+
+        # Supprimer l'ancien pairing si existant
+        _bt_cmd("remove", PRINTER_MAC)
         time.sleep(1)
-        proc.stdin.write("quit\n")
-        proc.stdin.flush()
-        proc.wait(timeout=15)
+
+        # Scan pour détecter l'imprimante
+        log.info("Scan Bluetooth (5s)...")
+        proc = subprocess.Popen(
+            ["bluetoothctl", "scan", "on"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        time.sleep(5)
+        proc.terminate()
+        proc.wait(timeout=3)
+
+        # Pairing
+        log.info(f"Pairing {PRINTER_MAC}...")
+        out = _bt_cmd("pair", PRINTER_MAC, timeout=15)
+        if "successful" in out.lower() or "already paired" in out.lower():
+            log.info("Pairing réussi")
+        else:
+            log.warning(f"Pairing résultat : {out.strip()[:100]}")
+
+        # Trust
+        _bt_cmd("trust", PRINTER_MAC)
+        time.sleep(1)
+
         log.info("Re-pairing terminé")
         return True
     except Exception as e:
