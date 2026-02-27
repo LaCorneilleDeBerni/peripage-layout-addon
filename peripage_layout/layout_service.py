@@ -433,8 +433,19 @@ def main():
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     load_custom_fonts()
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
-    for name, path in {**FONT_MAP, **FONT_MAP_BOLD}.items():
-        log.info(f"  {name} -> {'OK' if os.path.exists(path) else 'ABSENT'} ({path})")
+    for name in FONT_MAP:
+        path_regular = FONT_MAP.get(name, "")
+        path_bold    = FONT_MAP_BOLD.get(name, "")
+        ok_r = os.path.exists(path_regular)
+        ok_b = os.path.exists(path_bold)
+        if ok_r and ok_b:
+            log.info(f"  {name} -> OK (regular + bold)")
+        elif ok_r:
+            log.info(f"  {name} -> OK (regular uniquement, bold absent)")
+        elif ok_b:
+            log.info(f"  {name} -> OK (bold uniquement, regular absent)")
+        else:
+            log.warning(f"  {name} -> ABSENT")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
     emoji_found = False
