@@ -22,7 +22,7 @@ options:
 schema:
   printer_mac: str
   printer_model: list(A6|A6p|A40|A40p)
-  font: list(DejaVu|DejaVuBold|Liberation|FreeSans)
+  font: list(DejaVu|DejaVuBold|Liberation)
   font_size: int
   port: int
   custom_fonts:
