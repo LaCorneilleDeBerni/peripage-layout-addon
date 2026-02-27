@@ -8,15 +8,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
 
 if len(sys.argv) < 6:
-    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT>")
+    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT> [CUSTOM_FONTS_JSON]")
     sys.exit(1)
 
-PRINTER_MAC      = sys.argv[1]
-PRINTER_MODEL    = sys.argv[2]
-FONT_NAME        = sys.argv[3]
-FONT_SIZE        = int(sys.argv[4])
-PORT             = int(sys.argv[5])
-PRINT_WIDTH      = 384
+PRINTER_MAC   = sys.argv[1]
+PRINTER_MODEL = sys.argv[2]
+FONT_NAME     = sys.argv[3]
+FONT_SIZE     = int(sys.argv[4])
+PORT          = int(sys.argv[5])
+CUSTOM_FONTS_JSON = sys.argv[6] if len(sys.argv) > 6 else "[]"
+PRINT_WIDTH   = 384
+
+# Polices custom chargées au démarrage : {"NomPolice": ImageFont, ...}
+CUSTOM_FONT_CACHE = {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("peripage-layout")
@@ -25,33 +29,32 @@ FONT_MAP = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "FreeSans":   "/usr/share/fonts/freefont/FreeSans.ttf",
 }
 
 FONT_MAP_BOLD = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "FreeSans":   "/usr/share/fonts/freefont/FreeSansBold.ttf",
 }
 
-EMOJI_FONT_PATHS = [
-    "/usr/share/fonts/NotoEmoji-Regular.ttf",
-    "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
-    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
-]
-
-_emoji_font_cache = {}
-CUSTOM_FONT_CACHE = {}
-
 def load_custom_fonts():
+    """Télécharge et charge les polices custom déclarées dans la config."""
     global CUSTOM_FONT_CACHE
+    # Lire depuis /data/options.json (fichier config généré par HA)
     fonts = []
     try:
         with open("/data/options.json", "r") as f:
             options = json.load(f)
         fonts = options.get("custom_fonts", [])
     except Exception:
-        log.warning("Impossible de lire custom_fonts depuis /data/options.json")
-        return
+        # Fallback sur l'argument CLI
+        try:
+            fonts = json.loads(CUSTOM_FONTS_JSON)
+        except Exception:
+            log.warning("Impossible de lire custom_fonts depuis la config")
+            return
     if not fonts:
         return
     for entry in fonts:
@@ -66,11 +69,20 @@ def load_custom_fonts():
                 data = resp.read()
             with open(dest, "wb") as f:
                 f.write(data)
+            # Test que Pillow peut la lire
             ImageFont.truetype(dest, 24)
             CUSTOM_FONT_CACHE[name] = dest
             log.info(f"Police custom '{name}' chargée depuis {url}")
         except Exception as e:
             log.warning(f"Police custom '{name}' impossible à charger : {e}")
+
+EMOJI_FONT_PATHS = [
+    "/usr/share/fonts/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
+]
+
+_emoji_font_cache = {}
 
 def _get_emoji_font(size: int):
     if size in _emoji_font_cache:
@@ -98,13 +110,16 @@ def _is_emoji(code: int) -> bool:
 
 def load_font(size: int, bold: bool = False, font_name: str = None) -> ImageFont.FreeTypeFont:
     name = font_name if font_name else FONT_NAME
+    # 1. Chercher dans les polices custom
     if name in CUSTOM_FONT_CACHE:
         try:
             return ImageFont.truetype(CUSTOM_FONT_CACHE[name], size)
         except Exception:
             pass
+    # 2. Chercher dans les polices système
     font_map = FONT_MAP_BOLD if bold else FONT_MAP
     path = font_map.get(name)
+    # 3. Fallback vers police globale puis DejaVu
     if not path or not os.path.exists(path):
         path = font_map.get(FONT_NAME)
     if not path or not os.path.exists(path):
@@ -291,44 +306,55 @@ def compose_page(blocks: list) -> tuple:
         y += img.height
     return page, warnings
 
-MODEL_MAP = {
-    "A6":  "A6",
-    "A6p": "A6p",
-    "A40": "A40",
-    "A40p": "A40p",
-}
+def _image_to_printer_bytes(image: Image.Image) -> bytes:
+    img = image.convert("L")
+    w, h = img.size
+    if w != PRINT_WIDTH:
+        new_h = int(h * PRINT_WIDTH / w)
+        img   = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
+        w, h  = img.size
+    img = img.convert("1", dither=Image.FLOYDSTEINBERG)
+    BPL = PRINT_WIDTH // 8
+    xL, xH = BPL & 0xFF, (BPL >> 8) & 0xFF
+    yL, yH = h & 0xFF, (h >> 8) & 0xFF
+    data  = bytearray()
+    data += bytes([0x1B, 0x40])
+    data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
+    for y in range(h):
+        line_bytes = bytearray(BPL)
+        for x in range(PRINT_WIDTH):
+            if img.getpixel((x, y)) == 0:
+                line_bytes[x // 8] |= (0x80 >> (x % 8))
+        data += bytes(line_bytes)
+    data += bytes([0x1B, 0x64, 0x04])
+    return bytes(data)
 
 def _do_print(image: Image.Image) -> dict:
-    import peripage as pp
     result = {"success": False, "error": None}
-
-    PERIPAGE_MODEL_MAP = {
-        "A6":   pp.PrinterType.A6,
-        "A6p":  pp.PrinterType.A6p,
-        "A40":  pp.PrinterType.A40,
-        "A40p": pp.PrinterType.A40p,
-    }
-
     def _thread():
+        import socket
+        sock = None
         try:
-            printer_type = PERIPAGE_MODEL_MAP.get(PRINTER_MODEL, pp.PrinterType.A6)
-            printer = pp.Printer(PRINTER_MAC, printer_type)
-            printer.connect()
-            log.info(f"Connecté via peripage — envoi image {image.width}x{image.height}px")
-            img_rgb = image.convert("RGB")
-            printer.printImage(img_rgb)
-            printer.printBreak(100)
-            printer.disconnect()
+            printer_bytes = _image_to_printer_bytes(image)
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+            sock.settimeout(15)
+            sock.connect((PRINTER_MAC, 1))
+            log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
+            for i in range(0, len(printer_bytes), 256):
+                sock.send(printer_bytes[i:i + 256])
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
-            log.error(f"Erreur impression : {e}")
-
+            log.error(f"Erreur Bluetooth : {e}")
+        finally:
+            if sock:
+                try: sock.close()
+                except Exception: pass
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
-    t.join(timeout=45)
+    t.join(timeout=30)
     if t.is_alive():
-        result["error"] = "Timeout impression (45s)"
+        result["error"] = "Timeout Bluetooth (30s)"
     return result
 
 def send_to_printer(image: Image.Image) -> tuple:
@@ -398,10 +424,12 @@ def main():
         log.error(f"Adresse MAC invalide ou placeholder : '{PRINTER_MAC}'")
         sys.exit(1)
 
-    load_custom_fonts()
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
+    load_custom_fonts()
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
+    for name, path in {**FONT_MAP, **FONT_MAP_BOLD}.items():
+        log.info(f"  {name} -> {'OK' if os.path.exists(path) else 'ABSENT'} ({path})")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
     emoji_found = False
@@ -409,7 +437,6 @@ def main():
         if os.path.exists(path):
             log.info(f"Police emoji trouvée : {path}")
             emoji_found = True
-            break
     if not emoji_found:
         log.warning("Police emoji introuvable — les emojis s'afficheront en carré")
 
