@@ -30,14 +30,12 @@ FONT_MAP = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-    "FreeSans":   "/usr/share/fonts/freefont/FreeSans.ttf",
 }
 
 FONT_MAP_BOLD = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
-    "FreeSans":   "/usr/share/fonts/freefont/FreeSansBold.ttf",
 }
 
 def load_custom_fonts():
