@@ -8,7 +8,7 @@ PORT=$(bashio::config 'port')
 BT_ADAPTER_MAC=$(bashio::config 'bt_adapter_mac')
 
 bashio::log.info "PeriPage Layout — démarrage"
-bashio::log.info "MAC: ${MAC} | Modèle: ${MODEL} | Port: ${PORT}"
+bashio::log.info "MAC: ${MAC} | Modèle: ${MODEL} | Port: ${PORT} | Adaptateur MAC: ${BT_ADAPTER_MAC}"
 
 trap 'bashio::log.info "Arrêt."; kill ${PID} 2>/dev/null; exit 0' SIGTERM SIGINT
 
