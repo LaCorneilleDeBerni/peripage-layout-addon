@@ -42,10 +42,20 @@ FONT_MAP_BOLD = {
 def load_custom_fonts():
     """Télécharge et charge les polices custom déclarées dans la config."""
     global CUSTOM_FONT_CACHE
+    # Lire depuis /data/options.json (fichier config généré par HA)
+    fonts = []
     try:
-        fonts = json.loads(CUSTOM_FONTS_JSON)
+        with open("/data/options.json", "r") as f:
+            options = json.load(f)
+        fonts = options.get("custom_fonts", [])
     except Exception:
-        log.warning("Impossible de lire custom_fonts depuis la config")
+        # Fallback sur l'argument CLI
+        try:
+            fonts = json.loads(CUSTOM_FONTS_JSON)
+        except Exception:
+            log.warning("Impossible de lire custom_fonts depuis la config")
+            return
+    if not fonts:
         return
     for entry in fonts:
         name = entry.get("name", "").strip()
