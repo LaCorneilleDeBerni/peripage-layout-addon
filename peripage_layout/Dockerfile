@@ -8,6 +8,8 @@ RUN apk add --no-cache \
     bluez \
     bluez-libs \
     ttf-dejavu \
+    ttf-liberation \
+    ttf-freefont \
     wget
 
 # NotoEmoji v2.034 — format TTF classique compatible Pillow
