@@ -342,6 +342,7 @@ def _do_print(image: Image.Image) -> dict:
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
+            log.error(f"Erreur Bluetooth : {e}")
         finally:
             if sock:
                 try:
