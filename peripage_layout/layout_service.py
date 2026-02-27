@@ -32,6 +32,7 @@ EMOJI_FONT_PATHS = [
     "/usr/share/fonts/Symbola.ttf",
     "/usr/share/fonts/NotoEmoji-Regular.ttf",
     "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
 ]
 
 _emoji_font_cache = {}
@@ -375,7 +376,7 @@ def main():
                 ef    = ImageFont.truetype(path, 24)
                 dummy = Image.new("L", (1, 1))
                 draw  = ImageDraw.Draw(dummy)
-                for e in ['🌿', '💙', '😊', '✅', '🌞']:
+                for e in ['🌿', '💙', '😊', '✅', '🌞', '🥰', '🎉', '🌙', '⭐', '🔥']:
                     bbox = draw.textbbox((0, 0), e, font=ef)
                     w    = bbox[2] - bbox[0]
                     log.info(f"  Emoji {e} U+{ord(e):04X} -> {w}px {'OK' if w > 2 else 'VIDE'}")
