@@ -67,19 +67,21 @@ def _is_emoji(code: int) -> bool:
         0x2B00  <= code <= 0x2BFF
     )
 
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+def load_font(size: int, bold: bool = False, font_name: str = None) -> ImageFont.FreeTypeFont:
+    name = font_name if font_name else FONT_NAME
     font_map = FONT_MAP_BOLD if bold else FONT_MAP
-    path = font_map.get(FONT_NAME)
-    # Fallback vers DejaVu si la police demandée n'existe pas
+    path = font_map.get(name)
+    # Fallback vers police globale puis DejaVu si introuvable
     if not path or not os.path.exists(path):
-        fallback_map = FONT_MAP_BOLD if bold else FONT_MAP
-        path = fallback_map.get("DejaVu")
+        path = font_map.get(FONT_NAME)
+    if not path or not os.path.exists(path):
+        path = font_map.get("DejaVu")
     if path and os.path.exists(path):
         try:
             return ImageFont.truetype(path, size)
         except Exception:
             pass
-    log.warning(f"Police '{FONT_NAME}' introuvable, fallback PIL.")
+    log.warning(f"Police '{name}' introuvable, fallback PIL.")
     return ImageFont.load_default()
 
 def line_height(font) -> int:
@@ -146,7 +148,8 @@ def render_text(block: dict) -> Image.Image:
     bold      = bool(block.get("bold", False))
     align     = block.get("align", "left")
     padding   = int(block.get("padding", 4))
-    font = load_font(font_size, bold)
+    font_name = block.get("font", None)
+    font = load_font(font_size, bold, font_name)
     lh   = line_height(font)
     max_chars = max(10, int(PRINT_WIDTH / (font_size * 0.58)))
     lines = []
@@ -181,7 +184,8 @@ def render_list(block: dict) -> Image.Image:
     bold      = bool(block.get("bold", False))
     bullet    = block.get("bullet", "•")
     padding   = 4
-    font = load_font(font_size, bold)
+    font_name = block.get("font", None)
+    font = load_font(font_size, bold, font_name)
     lh   = line_height(font)
     max_chars = max(10, int((PRINT_WIDTH - 24) / (font_size * 0.58)))
     rendered_lines = []
