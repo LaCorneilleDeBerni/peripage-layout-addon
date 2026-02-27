@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
 
 if len(sys.argv) < 6:
-    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT>")
+    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT> [CUSTOM_FONTS_JSON]")
     sys.exit(1)
 
 PRINTER_MAC   = sys.argv[1]
@@ -16,7 +16,11 @@ PRINTER_MODEL = sys.argv[2]
 FONT_NAME     = sys.argv[3]
 FONT_SIZE     = int(sys.argv[4])
 PORT          = int(sys.argv[5])
+CUSTOM_FONTS_JSON = sys.argv[6] if len(sys.argv) > 6 else "[]"
 PRINT_WIDTH   = 384
+
+# Polices custom chargées au démarrage : {"NomPolice": ImageFont, ...}
+CUSTOM_FONT_CACHE = {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("peripage-layout")
@@ -34,6 +38,33 @@ FONT_MAP_BOLD = {
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
     "FreeSans":   "/usr/share/fonts/freefont/FreeSansBold.ttf",
 }
+
+def load_custom_fonts():
+    """Télécharge et charge les polices custom déclarées dans la config."""
+    global CUSTOM_FONT_CACHE
+    try:
+        fonts = json.loads(CUSTOM_FONTS_JSON)
+    except Exception:
+        log.warning("Impossible de lire custom_fonts depuis la config")
+        return
+    for entry in fonts:
+        name = entry.get("name", "").strip()
+        url  = entry.get("url", "").strip()
+        if not name or not url:
+            continue
+        dest = f"/tmp/custom_font_{name}.ttf"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "PeriPage-Layout-Addon/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+            with open(dest, "wb") as f:
+                f.write(data)
+            # Test que Pillow peut la lire
+            ImageFont.truetype(dest, 24)
+            CUSTOM_FONT_CACHE[name] = dest
+            log.info(f"Police custom '{name}' chargée depuis {url}")
+        except Exception as e:
+            log.warning(f"Police custom '{name}' impossible à charger : {e}")
 
 EMOJI_FONT_PATHS = [
     "/usr/share/fonts/NotoEmoji-Regular.ttf",
@@ -69,9 +100,16 @@ def _is_emoji(code: int) -> bool:
 
 def load_font(size: int, bold: bool = False, font_name: str = None) -> ImageFont.FreeTypeFont:
     name = font_name if font_name else FONT_NAME
+    # 1. Chercher dans les polices custom
+    if name in CUSTOM_FONT_CACHE:
+        try:
+            return ImageFont.truetype(CUSTOM_FONT_CACHE[name], size)
+        except Exception:
+            pass
+    # 2. Chercher dans les polices système
     font_map = FONT_MAP_BOLD if bold else FONT_MAP
     path = font_map.get(name)
-    # Fallback vers police globale puis DejaVu si introuvable
+    # 3. Fallback vers police globale puis DejaVu
     if not path or not os.path.exists(path):
         path = font_map.get(FONT_NAME)
     if not path or not os.path.exists(path):
@@ -378,6 +416,7 @@ def main():
 
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
+    load_custom_fonts()
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     for name, path in {**FONT_MAP, **FONT_MAP_BOLD}.items():
         log.info(f"  {name} -> {'OK' if os.path.exists(path) else 'ABSENT'} ({path})")
