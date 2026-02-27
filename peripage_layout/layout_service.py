@@ -57,6 +57,21 @@ FONT_MAP = {
     "FreeSans":   "/usr/share/fonts/dejavu/DejaVuSans.ttf",   # fallback DejaVu
 }
 
+EMOJI_FONT_PATHS = [
+    "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/NotoEmoji-Regular.ttf",
+]
+
+def _get_emoji_font(size: int):
+    for path in EMOJI_FONT_PATHS:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    return None
+
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     name = "DejaVuBold" if bold else FONT_NAME
     path = FONT_MAP.get(name)
@@ -72,6 +87,30 @@ def line_height(font: ImageFont.FreeTypeFont) -> int:
     dummy = Image.new("L", (PRINT_WIDTH, 10))
     draw = ImageDraw.Draw(dummy)
     return draw.textbbox((0, 0), "Ay", font=font)[3] + 4
+
+def draw_text_with_emoji(draw, pos, text, font, size, fill=0):
+    """
+    Dessine du texte en utilisant DejaVu pour les caractères normaux
+    et Noto Emoji pour les emojis. Retourne la largeur totale dessinée.
+    """
+    emoji_font = _get_emoji_font(size)
+    x, y = pos
+
+    for char in text:
+        code = ord(char)
+        # Plages Unicode emoji
+        is_emoji = (
+            0x1F300 <= code <= 0x1FAFF or  # Emoji principaux
+            0x2600  <= code <= 0x27BF or   # Symboles divers
+            0x1F000 <= code <= 0x1F02F or  # Tuiles Mahjong
+            0x1F0A0 <= code <= 0x1F0FF     # Cartes
+        )
+        f = emoji_font if (is_emoji and emoji_font) else font
+        draw.text((x, y), char, font=f, fill=fill)
+        bbox = draw.textbbox((0, 0), char, font=f)
+        x += bbox[2] - bbox[0]
+
+    return x
 
 # ──────────────────────────────────────────────
 # Verrou d'impression
@@ -147,7 +186,7 @@ def render_text(block: dict) -> Image.Image:
             x = PRINT_WIDTH - w - 8
         else:
             x = 8
-        draw.text((x, y), line, font=font, fill=0)
+        draw_text_with_emoji(draw, (x, y), line, font, font_size, fill=0)
         y += lh
 
     return img
@@ -193,10 +232,10 @@ def render_list(block: dict) -> Image.Image:
     y = padding
     for line, is_first in rendered_lines:
         if is_first:
-            draw.text((8, y), bullet, font=font, fill=0)
-            draw.text((8 + font_size, y), line, font=font, fill=0)
+            draw_text_with_emoji(draw, (8, y), bullet, font, font_size, fill=0)
+            draw_text_with_emoji(draw, (8 + font_size, y), line, font, font_size, fill=0)
         else:
-            draw.text((8 + font_size, y), line, font=font, fill=0)
+            draw_text_with_emoji(draw, (8 + font_size, y), line, font, font_size, fill=0)
         y += lh
 
     return img
@@ -309,7 +348,6 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     yH = (h >> 8) & 0xFF
 
     data = bytearray()
-    data += bytes([0x1B, 0x40])  # ESC @ — init imprimante
     data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
 
     for y in range(h):
@@ -343,7 +381,6 @@ def _do_print(image: Image.Image) -> dict:
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
-            log.error(f"Erreur Bluetooth : {e}")
         finally:
             if sock:
                 try:
