@@ -309,6 +309,7 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     yH = (h >> 8) & 0xFF
 
     data = bytearray()
+    data += bytes([0x1B, 0x40])  # ESC @ — init imprimante
     data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
 
     for y in range(h):
