@@ -16,6 +16,7 @@ PRINTER_MODEL = sys.argv[2]
 FONT_NAME     = sys.argv[3]
 FONT_SIZE     = int(sys.argv[4])
 PORT          = int(sys.argv[5])
+BT_ADAPTER    = sys.argv[6] if len(sys.argv) > 6 else "hci1"
 PRINT_WIDTH   = 384
 
 # Polices custom chargées au démarrage : {"NomPolice": ImageFont, ...}
@@ -322,32 +323,104 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     data += bytes([0x1B, 0x64, 0x04])
     return bytes(data)
 
+def _bt_select_adapter():
+    """Force l'utilisation de l'adaptateur configuré."""
+    try:
+        subprocess.run(
+            ["bluetoothctl", "select", BT_ADAPTER],
+            capture_output=True, timeout=5
+        )
+        log.info(f"Adaptateur Bluetooth : {BT_ADAPTER}")
+    except Exception as e:
+        log.warning(f"Impossible de sélectionner {BT_ADAPTER} : {e}")
+
+def _bt_repair():
+    """Tente un re-pairing de l'imprimante via bluetoothctl."""
+    log.info(f"Re-pairing automatique de {PRINTER_MAC}...")
+    try:
+        cmds = [
+            f"select {BT_ADAPTER}",
+            f"remove {PRINTER_MAC}",
+            "scan on",
+        ]
+        # Lancer scan 5 secondes pour détecter l'imprimante
+        proc = subprocess.Popen(
+            ["bluetoothctl"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        proc.stdin.write(f"select {BT_ADAPTER}\n")
+        proc.stdin.write(f"remove {PRINTER_MAC}\n")
+        proc.stdin.write("scan on\n")
+        proc.stdin.flush()
+        import time
+        time.sleep(5)
+        proc.stdin.write("scan off\n")
+        proc.stdin.write(f"pair {PRINTER_MAC}\n")
+        proc.stdin.flush()
+        time.sleep(4)
+        proc.stdin.write(f"trust {PRINTER_MAC}\n")
+        proc.stdin.flush()
+        time.sleep(1)
+        proc.stdin.write("quit\n")
+        proc.stdin.flush()
+        proc.wait(timeout=15)
+        log.info("Re-pairing terminé")
+        return True
+    except Exception as e:
+        log.error(f"Re-pairing échoué : {e}")
+        return False
+
+def _rfcomm_connect_and_send(printer_bytes: bytes) -> tuple:
+    """Tente une connexion RFCOMM et envoie les données. Retourne (success, error)."""
+    import socket
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        sock.settimeout(15)
+        sock.connect((PRINTER_MAC, 1))
+        log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
+        for i in range(0, len(printer_bytes), 256):
+            sock.send(printer_bytes[i:i + 256])
+        return True, None
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+
 def _do_print(image: Image.Image) -> dict:
     result = {"success": False, "error": None}
+
     def _thread():
-        import socket
-        sock = None
-        try:
-            printer_bytes = _image_to_printer_bytes(image)
-            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-            sock.settimeout(15)
-            sock.connect((PRINTER_MAC, 1))
-            log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
-            for i in range(0, len(printer_bytes), 256):
-                sock.send(printer_bytes[i:i + 256])
+        printer_bytes = _image_to_printer_bytes(image)
+
+        # Tentative 1
+        ok, err = _rfcomm_connect_and_send(printer_bytes)
+        if ok:
             result["success"] = True
-        except Exception as e:
-            result["error"] = str(e)
-            log.error(f"Erreur Bluetooth : {e}")
-        finally:
-            if sock:
-                try: sock.close()
-                except Exception: pass
+            return
+
+        # Échec — tentative de re-pairing puis retry
+        log.warning(f"Connexion échouée ({err}), tentative de re-pairing...")
+        _bt_repair()
+
+        ok, err = _rfcomm_connect_and_send(printer_bytes)
+        if ok:
+            result["success"] = True
+            return
+
+        result["error"] = f"Échec après re-pairing : {err}"
+        log.error(result["error"])
+
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
-    t.join(timeout=30)
+    t.join(timeout=60)
     if t.is_alive():
-        result["error"] = "Timeout Bluetooth (30s)"
+        result["error"] = "Timeout Bluetooth (60s)"
     return result
 
 def send_to_printer(image: Image.Image) -> tuple:
@@ -417,6 +490,7 @@ def main():
         log.error(f"Adresse MAC invalide ou placeholder : '{PRINTER_MAC}'")
         sys.exit(1)
 
+    _bt_select_adapter()
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     load_custom_fonts()
