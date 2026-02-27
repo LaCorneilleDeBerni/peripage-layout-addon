@@ -8,9 +8,11 @@ RUN apk add --no-cache \
     bluez \
     bluez-libs \
     ttf-dejavu \
-    font-noto-emoji
+    wget
 
-RUN find /usr/share/fonts -name "*moji*" -o -name "*noto*" 2>/dev/null | head -20
+RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoEmoji-Regular.ttf" \
+    -O /usr/share/fonts/NotoEmoji-Regular.ttf || \
+    echo "Téléchargement police emoji échoué, les emojis seront en carré"
 
 COPY run.sh /
 COPY layout_service.py /
