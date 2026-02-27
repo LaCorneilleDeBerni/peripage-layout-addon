@@ -8,9 +8,13 @@ RUN apk add --no-cache \
     bluez \
     bluez-libs \
     ttf-dejavu \
-    font-symbola
+    wget
 
-RUN find /usr/share/fonts -name "*ymbol*" -o -name "*YMBOL*" 2>/dev/null
+# NotoEmoji v2.034 — format TTF classique compatible Pillow
+RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/v2.034/fonts/NotoEmoji-Regular.ttf" \
+    -O /usr/share/fonts/NotoEmoji-Regular.ttf \
+    && echo "Police emoji installée OK" \
+    || echo "Téléchargement échoué"
 
 COPY run.sh /
 COPY layout_service.py /
