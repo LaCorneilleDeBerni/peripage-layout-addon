@@ -12,6 +12,7 @@ init: false
 privileged:
   - NET_ADMIN
 host_network: true
+host_dbus: true
 options:
   printer_mac: "XX:XX:XX:XX:XX:XX"
   printer_model: "A6"
