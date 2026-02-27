@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
 
 if len(sys.argv) < 6:
-    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT> [CUSTOM_FONTS_JSON]")
+    print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT>")
     sys.exit(1)
 
 PRINTER_MAC   = sys.argv[1]
@@ -16,7 +16,6 @@ PRINTER_MODEL = sys.argv[2]
 FONT_NAME     = sys.argv[3]
 FONT_SIZE     = int(sys.argv[4])
 PORT          = int(sys.argv[5])
-CUSTOM_FONTS_JSON = sys.argv[6] if len(sys.argv) > 6 else "[]"
 PRINT_WIDTH   = 384
 
 # Polices custom chargées au démarrage : {"NomPolice": ImageFont, ...}
@@ -29,14 +28,12 @@ FONT_MAP = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-    "FreeSans":   "/usr/share/fonts/freefont/FreeSans.ttf",
 }
 
 FONT_MAP_BOLD = {
     "DejaVu":     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "DejaVuBold": "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
-    "FreeSans":   "/usr/share/fonts/freefont/FreeSansBold.ttf",
 }
 
 def load_custom_fonts():
@@ -49,12 +46,8 @@ def load_custom_fonts():
             options = json.load(f)
         fonts = options.get("custom_fonts", [])
     except Exception:
-        # Fallback sur l'argument CLI
-        try:
-            fonts = json.loads(CUSTOM_FONTS_JSON)
-        except Exception:
-            log.warning("Impossible de lire custom_fonts depuis la config")
-            return
+        log.warning("Impossible de lire custom_fonts depuis /data/options.json")
+        return
     if not fonts:
         return
     for entry in fonts:
@@ -428,8 +421,6 @@ def main():
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     load_custom_fonts()
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
-    for name, path in {**FONT_MAP, **FONT_MAP_BOLD}.items():
-        log.info(f"  {name} -> {'OK' if os.path.exists(path) else 'ABSENT'} ({path})")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
     emoji_found = False
