@@ -520,6 +520,8 @@ def main():
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
+    for path in EMOJI_FONT_PATHS:
+        log.info(f"Emoji font check: {path} -> {os.path.exists(path)}")
 
 
     ThreadingHTTPServer.allow_reuse_address = True
