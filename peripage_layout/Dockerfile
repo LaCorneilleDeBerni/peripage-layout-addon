@@ -10,11 +10,11 @@ RUN apk add --no-cache \
     ttf-dejavu \
     wget
 
-# NotoEmoji v2.034 — format TTF classique compatible Pillow
-RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/v2.034/fonts/NotoEmoji-Regular.ttf" \
-    -O /usr/share/fonts/NotoEmoji-Regular.ttf \
-    && echo "Police emoji installée OK" \
-    || echo "Téléchargement échoué"
+# Symbola — police Unicode complète noir et blanc, idéale impression thermique
+RUN wget -q "https://github.com/nicowillis/fonts/raw/master/Symbola.ttf" \
+    -O /usr/share/fonts/Symbola.ttf \
+    && echo "Symbola installée OK" \
+    || echo "Téléchargement Symbola échoué"
 
 COPY run.sh /
 COPY layout_service.py /
