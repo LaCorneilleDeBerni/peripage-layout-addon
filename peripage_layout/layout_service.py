@@ -90,24 +90,23 @@ def line_height(font: ImageFont.FreeTypeFont) -> int:
     return draw.textbbox((0, 0), "Ay", font=font)[3] + 4
 
 def draw_text_with_emoji(draw, pos, text, font, size, fill=0):
-    """
-    Dessine du texte en utilisant DejaVu pour les caractères normaux
-    et Noto Emoji pour les emojis. Retourne la largeur totale dessinée.
-    """
     emoji_font = _get_emoji_font(size)
     x, y = pos
 
     for char in text:
         code = ord(char)
-        # Plages Unicode emoji
         is_emoji = (
-            0x1F300 <= code <= 0x1FAFF or  # Emoji principaux
-            0x2600  <= code <= 0x27BF or   # Symboles divers
-            0x1F000 <= code <= 0x1F02F or  # Tuiles Mahjong
-            0x1F0A0 <= code <= 0x1F0FF     # Cartes
+            0x1F300 <= code <= 0x1FAFF or
+            0x2600  <= code <= 0x27BF or
+            0x1F000 <= code <= 0x1F02F or
+            0x1F0A0 <= code <= 0x1F0FF
         )
         f = emoji_font if (is_emoji and emoji_font) else font
-        draw.text((x, y), char, font=f, fill=fill)
+        try:
+            draw.text((x, y), char, font=f, fill=fill)
+        except Exception as e:
+            log.warning(f"Char U+{code:04X} ({char}) erreur: {e}")
+            draw.text((x, y), char, font=font, fill=fill)
         bbox = draw.textbbox((0, 0), char, font=f)
         x += bbox[2] - bbox[0]
 
