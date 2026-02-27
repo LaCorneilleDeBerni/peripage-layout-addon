@@ -324,13 +324,24 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     return bytes(data)
 
 def _bt_select_adapter():
-    """Force l'utilisation de l'adaptateur configuré."""
+    """Force l'adaptateur configuré et paire l'imprimante si nécessaire."""
     try:
-        subprocess.run(
-            ["bluetoothctl", "select", BT_ADAPTER],
-            capture_output=True, timeout=5
-        )
+        # Sélectionner l'adaptateur
+        subprocess.run(["bluetoothctl", "select", BT_ADAPTER],
+                       capture_output=True, timeout=5)
         log.info(f"Adaptateur Bluetooth : {BT_ADAPTER}")
+
+        # Vérifier si l'imprimante est déjà pairée
+        result = subprocess.run(["bluetoothctl", "info", PRINTER_MAC],
+                                capture_output=True, text=True, timeout=5)
+        already_paired = "Paired: yes" in result.stdout
+
+        if not already_paired:
+            log.info(f"Imprimante non pairée sur {BT_ADAPTER}, pairing initial...")
+            _bt_repair()
+        else:
+            log.info(f"Imprimante déjà pairée sur {BT_ADAPTER}")
+
     except Exception as e:
         log.warning(f"Impossible de sélectionner {BT_ADAPTER} : {e}")
 
