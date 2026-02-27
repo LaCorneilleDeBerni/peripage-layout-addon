@@ -1,6 +1,6 @@
 name: "PeriPage Layout"
 description: "Mise en page et impression sur imprimante thermique PeriPage via Bluetooth"
-version: "1.1.0"
+version: "1.2.0"
 slug: peripage_layout
 url: "https://github.com/LaCorneilleDeBerni/peripage-layout-addon"
 arch:
@@ -12,6 +12,9 @@ init: false
 privileged:
   - NET_ADMIN
 host_network: true
+bluetooth: true
+hassio_api: true
+homeassistant_api: true
 options:
   printer_mac: "XX:XX:XX:XX:XX:XX"
   printer_model: "A6"
@@ -22,7 +25,7 @@ options:
 schema:
   printer_mac: str
   printer_model: list(A6|A6p|A40|A40p)
-  font: list(DejaVu|DejaVuBold|Liberation|FreeSans)
+  font: list(DejaVu|DejaVuBold|Liberation)
   font_size: int
   port: int
   custom_fonts:
