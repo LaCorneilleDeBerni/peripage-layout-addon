@@ -13,7 +13,6 @@ RUN apk add --no-cache \
     gcc \
     ttf-dejavu \
     ttf-liberation \
-    font-freefont \
     wget \
     git
 
@@ -34,5 +33,7 @@ COPY run.sh /
 COPY layout_service.py /
 
 RUN chmod +x /run.sh
+
+CMD ["/run.sh"]
 
 CMD ["/run.sh"]
