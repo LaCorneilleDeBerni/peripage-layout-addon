@@ -375,6 +375,8 @@ def main():
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
+    for name, path in {**FONT_MAP, **FONT_MAP_BOLD}.items():
+        log.info(f"  {name} -> {path} : {'OK' if os.path.exists(path) else 'ABSENT'}")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
     emoji_found = False
