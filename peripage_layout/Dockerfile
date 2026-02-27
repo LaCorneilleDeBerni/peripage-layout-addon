@@ -19,6 +19,7 @@ RUN apk add --no-cache \
     ttf-dejavu \
     ttf-liberation \
     wget \
+    git \
     bash
 
 RUN pip3 install --no-cache-dir --break-system-packages \
