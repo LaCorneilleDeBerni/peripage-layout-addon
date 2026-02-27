@@ -508,20 +508,28 @@ def main():
         log.error(f"Adresse MAC invalide ou placeholder : '{PRINTER_MAC}'")
         sys.exit(1)
 
-    try:
-        result = subprocess.run(["hciconfig", "-a"], capture_output=True, text=True, timeout=5)
-        log.info("Adaptateurs Bluetooth :")
-        for line in result.stdout.splitlines():
-            log.info(f"  {line}")
-    except Exception as e:
-        log.warning(f"hciconfig non disponible : {e}")
-
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
+
+    # Détection police emoji
+    emoji_found = False
     for path in EMOJI_FONT_PATHS:
-        log.info(f"Emoji font check: {path} -> {os.path.exists(path)}")
+        if os.path.exists(path):
+            log.info(f"Police emoji trouvée : {path}")
+            emoji_found = True
+            break
+    if not emoji_found:
+        try:
+            result = subprocess.run(['find', '/usr/share/fonts', '-name', '*.ttf'],
+                                    capture_output=True, text=True, timeout=5)
+            log.info("Polices TTF disponibles :")
+            for line in result.stdout.splitlines():
+                log.info(f"  {line}")
+        except Exception:
+            pass
+        log.warning("Police emoji introuvable — les emojis s'afficheront en carré")
 
 
     ThreadingHTTPServer.allow_reuse_address = True
