@@ -4,6 +4,7 @@ PeriPage Layout Addon — layout_service.py
 """
 
 import sys, json, logging, threading, subprocess, base64, textwrap, urllib.request, io, os
+import peripage as pp
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
 
@@ -329,29 +330,31 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     data += bytes([0x1B, 0x64, 0x04])
     return bytes(data)
 
+MODEL_MAP = {
+    "A6":  pp.PrinterType.A6,
+    "A6p": pp.PrinterType.A6p,
+    "A40": pp.PrinterType.A40,
+    "A40p": pp.PrinterType.A40p,
+}
+
 def _do_print(image: Image.Image) -> dict:
     result = {"success": False, "error": None}
     def _thread():
-        import socket
-        sock = None
         try:
-            printer_bytes = _image_to_printer_bytes(image)
-            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-            sock.settimeout(15)
-            sock.connect((PRINTER_MAC, 1))
-            log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
-            for i in range(0, len(printer_bytes), 256):
-                sock.send(printer_bytes[i:i + 256])
-            import time
-            time.sleep(1.5)  # Laisser le temps a l'imprimante de traiter les donnees
+            printer_type = MODEL_MAP.get(PRINTER_MODEL, pp.PrinterType.A6)
+            printer = pp.Printer(PRINTER_MAC, printer_type)
+            printer.connect()
+            log.info(f"Connecte via peripage-python, envoi image {image.size}")
+            # Convertir en RGB pour la librairie
+            img_rgb = image.convert("RGB")
+            printer.printImage(img_rgb)
+            printer.printBreak(100)
+            printer.disconnect()
             result["success"] = True
+            log.info("Impression transmise avec succes.")
         except Exception as e:
             result["error"] = str(e)
             log.error(f"Erreur Bluetooth : {e}")
-        finally:
-            if sock:
-                try: sock.close()
-                except Exception: pass
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
     t.join(timeout=30)
