@@ -10,7 +10,7 @@ L'addon reçoit une liste de **blocs de contenu** en JSON, compose la page autom
 
 1. Dans Home Assistant, allez dans **Settings > Add-ons > Add-on Store**
 2. Cliquez sur les **⋮** (menu) > **Repositories**
-3. Ajoutez : `https://github.com/VOTRE_USER/peripage-layout-addon`
+3. Ajoutez : `https://github.com/LaCorneilleDeBerni/peripage-layout-addon`
 4. Installez **PeriPage Layout**
 5. Configurez votre adresse MAC et démarrez
 
