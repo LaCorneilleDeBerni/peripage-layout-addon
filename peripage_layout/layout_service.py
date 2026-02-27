@@ -16,11 +16,7 @@ PRINTER_MODEL = sys.argv[2]
 FONT_NAME     = sys.argv[3]
 FONT_SIZE     = int(sys.argv[4])
 PORT          = int(sys.argv[5])
-BT_ADAPTER    = sys.argv[6] if len(sys.argv) > 6 else "hci1"
 PRINT_WIDTH   = 384
-
-# Polices custom chargées au démarrage : {"NomPolice": ImageFont, ...}
-CUSTOM_FONT_CACHE = {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("peripage-layout")
@@ -37,10 +33,17 @@ FONT_MAP_BOLD = {
     "Liberation": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
 }
 
+EMOJI_FONT_PATHS = [
+    "/usr/share/fonts/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
+    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
+]
+
+_emoji_font_cache = {}
+CUSTOM_FONT_CACHE = {}
+
 def load_custom_fonts():
-    """Télécharge et charge les polices custom déclarées dans la config."""
     global CUSTOM_FONT_CACHE
-    # Lire depuis /data/options.json (fichier config généré par HA)
     fonts = []
     try:
         with open("/data/options.json", "r") as f:
@@ -63,20 +66,11 @@ def load_custom_fonts():
                 data = resp.read()
             with open(dest, "wb") as f:
                 f.write(data)
-            # Test que Pillow peut la lire
             ImageFont.truetype(dest, 24)
             CUSTOM_FONT_CACHE[name] = dest
             log.info(f"Police custom '{name}' chargée depuis {url}")
         except Exception as e:
             log.warning(f"Police custom '{name}' impossible à charger : {e}")
-
-EMOJI_FONT_PATHS = [
-    "/usr/share/fonts/NotoEmoji-Regular.ttf",
-    "/usr/share/fonts/noto/NotoEmoji-Regular.ttf",
-    "/usr/share/fonts/noto-emoji/NotoEmoji-Regular.ttf",
-]
-
-_emoji_font_cache = {}
 
 def _get_emoji_font(size: int):
     if size in _emoji_font_cache:
@@ -104,16 +98,13 @@ def _is_emoji(code: int) -> bool:
 
 def load_font(size: int, bold: bool = False, font_name: str = None) -> ImageFont.FreeTypeFont:
     name = font_name if font_name else FONT_NAME
-    # 1. Chercher dans les polices custom
     if name in CUSTOM_FONT_CACHE:
         try:
             return ImageFont.truetype(CUSTOM_FONT_CACHE[name], size)
         except Exception:
             pass
-    # 2. Chercher dans les polices système
     font_map = FONT_MAP_BOLD if bold else FONT_MAP
     path = font_map.get(name)
-    # 3. Fallback vers police globale puis DejaVu
     if not path or not os.path.exists(path):
         path = font_map.get(FONT_NAME)
     if not path or not os.path.exists(path):
@@ -323,127 +314,32 @@ def _image_to_printer_bytes(image: Image.Image) -> bytes:
     data += bytes([0x1B, 0x64, 0x04])
     return bytes(data)
 
-def _bt_select_adapter():
-    """Force l'adaptateur configuré et paire l'imprimante si nécessaire."""
-    try:
-        # Sélectionner l'adaptateur
-        subprocess.run(["bluetoothctl", "select", BT_ADAPTER],
-                       capture_output=True, timeout=5)
-        log.info(f"Adaptateur Bluetooth : {BT_ADAPTER}")
-
-        # Vérifier si l'imprimante est déjà pairée
-        result = subprocess.run(["bluetoothctl", "info", PRINTER_MAC],
-                                capture_output=True, text=True, timeout=5)
-        already_paired = "Paired: yes" in result.stdout
-
-        if not already_paired:
-            log.info(f"Imprimante non pairée sur {BT_ADAPTER}, pairing initial...")
-            _bt_repair()
-        else:
-            log.info(f"Imprimante déjà pairée sur {BT_ADAPTER}")
-
-    except Exception as e:
-        log.warning(f"Impossible de sélectionner {BT_ADAPTER} : {e}")
-
-def _bt_cmd(*args, timeout=10) -> str:
-    """Exécute une commande bluetoothctl en mode non-interactif."""
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", *args],
-            capture_output=True, text=True, timeout=timeout
-        )
-        return result.stdout + result.stderr
-    except Exception as e:
-        return str(e)
-
-def _bt_repair():
-    """Tente un re-pairing de l'imprimante via bluetoothctl."""
-    import time
-    log.info(f"Re-pairing automatique de {PRINTER_MAC}...")
-    try:
-        # Sélectionner l'adaptateur
-        _bt_cmd("select", BT_ADAPTER)
-
-        # Supprimer l'ancien pairing si existant
-        _bt_cmd("remove", PRINTER_MAC)
-        time.sleep(1)
-
-        # Scan pour détecter l'imprimante
-        log.info("Scan Bluetooth (5s)...")
-        proc = subprocess.Popen(
-            ["bluetoothctl", "scan", "on"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        time.sleep(5)
-        proc.terminate()
-        proc.wait(timeout=3)
-
-        # Pairing
-        log.info(f"Pairing {PRINTER_MAC}...")
-        out = _bt_cmd("pair", PRINTER_MAC, timeout=15)
-        if "successful" in out.lower() or "already paired" in out.lower():
-            log.info("Pairing réussi")
-        else:
-            log.warning(f"Pairing résultat : {out.strip()[:100]}")
-
-        # Trust
-        _bt_cmd("trust", PRINTER_MAC)
-        time.sleep(1)
-
-        log.info("Re-pairing terminé")
-        return True
-    except Exception as e:
-        log.error(f"Re-pairing échoué : {e}")
-        return False
-
-def _rfcomm_connect_and_send(printer_bytes: bytes) -> tuple:
-    """Tente une connexion RFCOMM et envoie les données. Retourne (success, error)."""
-    import socket
-    sock = None
-    try:
-        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-        sock.settimeout(15)
-        sock.connect((PRINTER_MAC, 1))
-        log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
-        for i in range(0, len(printer_bytes), 256):
-            sock.send(printer_bytes[i:i + 256])
-        return True, None
-    except Exception as e:
-        return False, str(e)
-    finally:
-        if sock:
-            try: sock.close()
-            except Exception: pass
-
 def _do_print(image: Image.Image) -> dict:
     result = {"success": False, "error": None}
-
     def _thread():
-        printer_bytes = _image_to_printer_bytes(image)
-
-        # Tentative 1
-        ok, err = _rfcomm_connect_and_send(printer_bytes)
-        if ok:
+        import socket
+        sock = None
+        try:
+            printer_bytes = _image_to_printer_bytes(image)
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+            sock.settimeout(15)
+            sock.connect((PRINTER_MAC, 1))
+            log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
+            for i in range(0, len(printer_bytes), 256):
+                sock.send(printer_bytes[i:i + 256])
             result["success"] = True
-            return
-
-        # Échec — tentative de re-pairing puis retry
-        log.warning(f"Connexion échouée ({err}), tentative de re-pairing...")
-        _bt_repair()
-
-        ok, err = _rfcomm_connect_and_send(printer_bytes)
-        if ok:
-            result["success"] = True
-            return
-
-        result["error"] = f"Échec après re-pairing : {err}"
-        log.error(result["error"])
-
+        except Exception as e:
+            result["error"] = str(e)
+            log.error(f"Erreur Bluetooth : {e}")
+        finally:
+            if sock:
+                try: sock.close()
+                except Exception: pass
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
-    t.join(timeout=60)
+    t.join(timeout=30)
     if t.is_alive():
-        result["error"] = "Timeout Bluetooth (60s)"
+        result["error"] = "Timeout Bluetooth (30s)"
     return result
 
 def send_to_printer(image: Image.Image) -> tuple:
@@ -513,10 +409,9 @@ def main():
         log.error(f"Adresse MAC invalide ou placeholder : '{PRINTER_MAC}'")
         sys.exit(1)
 
-    _bt_select_adapter()
+    load_custom_fonts()
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
-    load_custom_fonts()
     log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
     log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
 
@@ -525,6 +420,7 @@ def main():
         if os.path.exists(path):
             log.info(f"Police emoji trouvée : {path}")
             emoji_found = True
+            break
     if not emoji_found:
         log.warning("Police emoji introuvable — les emojis s'afficheront en carré")
 
