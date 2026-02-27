@@ -10,6 +10,8 @@ RUN apk add --no-cache \
     ttf-dejavu \
     font-noto-emoji
 
+RUN find /usr/share/fonts -name "*moji*" -o -name "*noto*" 2>/dev/null | head -20
+
 COPY run.sh /
 COPY layout_service.py /
 
