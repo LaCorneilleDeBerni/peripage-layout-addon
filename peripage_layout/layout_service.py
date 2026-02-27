@@ -342,6 +342,8 @@ def _do_print(image: Image.Image) -> dict:
             log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
             for i in range(0, len(printer_bytes), 256):
                 sock.send(printer_bytes[i:i + 256])
+            import time
+            time.sleep(1.5)  # Laisser le temps a l'imprimante de traiter les donnees
             result["success"] = True
         except Exception as e:
             result["error"] = str(e)
