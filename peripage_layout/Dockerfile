@@ -8,13 +8,9 @@ RUN apk add --no-cache \
     bluez \
     bluez-libs \
     ttf-dejavu \
-    wget
+    font-symbola
 
-# Symbola — police Unicode complète noir et blanc, idéale impression thermique
-RUN wget -q "https://github.com/nicowillis/fonts/raw/master/Symbola.ttf" \
-    -O /usr/share/fonts/Symbola.ttf \
-    && echo "Symbola installée OK" \
-    || echo "Téléchargement Symbola échoué"
+RUN find /usr/share/fonts -name "*ymbol*" -o -name "*YMBOL*" 2>/dev/null
 
 COPY run.sh /
 COPY layout_service.py /
