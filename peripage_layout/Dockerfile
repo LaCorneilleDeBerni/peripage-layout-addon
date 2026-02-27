@@ -7,7 +7,8 @@ RUN apk add --no-cache \
     py3-pillow \
     bluez \
     bluez-libs \
-    ttf-dejavu
+    ttf-dejavu \
+    font-noto-emoji
 
 COPY run.sh /
 COPY layout_service.py /
