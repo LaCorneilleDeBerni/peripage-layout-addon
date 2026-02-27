@@ -10,9 +10,11 @@ RUN apk add --no-cache \
     ttf-dejavu \
     wget
 
-RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoEmoji-Regular.ttf" \
-    -O /usr/share/fonts/NotoEmoji-Regular.ttf || \
-    echo "Téléchargement police emoji échoué, les emojis seront en carré"
+# NotoEmoji v2.034 — format TTF classique compatible Pillow
+RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/v2.034/fonts/NotoEmoji-Regular.ttf" \
+    -O /usr/share/fonts/NotoEmoji-Regular.ttf \
+    && echo "Police emoji installée OK" \
+    || echo "Téléchargement échoué"
 
 COPY run.sh /
 COPY layout_service.py /
