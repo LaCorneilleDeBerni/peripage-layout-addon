@@ -324,6 +324,8 @@ def _do_print(image: Image.Image) -> dict:
             printer_bytes = _image_to_printer_bytes(image)
             sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
             sock.settimeout(15)
+            if BT_ADAPTER_MAC:
+                sock.bind((BT_ADAPTER_MAC, 1))
             sock.connect((PRINTER_MAC, 1))
             log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
             for i in range(0, len(printer_bytes), 256):
