@@ -11,12 +11,13 @@ if len(sys.argv) < 6:
     print("Usage: layout_service.py <MAC> <MODEL> <FONT> <FONT_SIZE> <PORT>")
     sys.exit(1)
 
-PRINTER_MAC   = sys.argv[1]
-PRINTER_MODEL = sys.argv[2]
-FONT_NAME     = sys.argv[3]
-FONT_SIZE     = int(sys.argv[4])
-PORT          = int(sys.argv[5])
-PRINT_WIDTH   = 384
+PRINTER_MAC      = sys.argv[1]
+PRINTER_MODEL    = sys.argv[2]
+FONT_NAME        = sys.argv[3]
+FONT_SIZE        = int(sys.argv[4])
+PORT             = int(sys.argv[5])
+BT_ADAPTER_MAC   = sys.argv[6] if len(sys.argv) > 6 else ""
+PRINT_WIDTH      = 384
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("peripage-layout")
@@ -323,6 +324,8 @@ def _do_print(image: Image.Image) -> dict:
             printer_bytes = _image_to_printer_bytes(image)
             sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
             sock.settimeout(15)
+            if BT_ADAPTER_MAC:
+                sock.bind((BT_ADAPTER_MAC, 0))
             sock.connect((PRINTER_MAC, 1))
             log.info(f"RFCOMM connecté, envoi de {len(printer_bytes)} bytes")
             for i in range(0, len(printer_bytes), 256):
