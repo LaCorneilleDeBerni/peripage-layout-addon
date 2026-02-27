@@ -13,7 +13,7 @@ RUN apk add --no-cache \
     gcc \
     ttf-dejavu \
     ttf-liberation \
-    ttf-freefont \
+    font-freefont \
     wget \
     git
 
