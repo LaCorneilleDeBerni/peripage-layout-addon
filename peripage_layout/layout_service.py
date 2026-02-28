@@ -395,6 +395,29 @@ def fire_ha_notification(error_msg: str):
     except Exception as e:
         log.warning(f"Impossible d'envoyer la notification HA : {e}")
 
+def get_todo_items(entity_id: str) -> tuple:
+    """Recupere les items non completes d une liste Todo via l API HA."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return [], "SUPERVISOR_TOKEN absent"
+    try:
+        req = urllib.request.Request(
+            f"http://supervisor/core/api/states/{entity_id}",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            state = json.loads(resp.read())
+        items = []
+        for item in state.get("attributes", {}).get("items", []):
+            if item.get("status") != "completed":
+                summary = item.get("summary", "").strip()
+                if summary:
+                    items.append(summary)
+        return items, None
+    except Exception as e:
+        return [], f"Erreur API HA : {e}"
+
+
 def send_to_printer(image: Image.Image) -> tuple:
     global printer_busy
     if not print_lock.acquire(blocking=False):
@@ -434,28 +457,58 @@ class LayoutHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             ok = validate_mac(PRINTER_MAC)
-            _send(self, 200 if ok else 503, {"status": "ok" if ok else "error", "mac": PRINTER_MAC, "model": PRINTER_MODEL, "font": FONT_NAME, "font_size": FONT_SIZE, "port": PORT, "supported_blocks": list(BLOCK_RENDERERS.keys())})
+            _send(self, 200 if ok else 503, {"status": "ok" if ok else "error", "mac": PRINTER_MAC, "model": PRINTER_MODEL, "font": FONT_NAME, "font_size": FONT_SIZE, "port": PORT, "supported_blocks": list(BLOCK_RENDERERS.keys()), "endpoints": ["/print", "/print_todo", "/health", "/status"]})
         elif self.path == "/status":
             _send(self, 200, {"busy": printer_busy, "mac": PRINTER_MAC})
         else:
             _send(self, 404, {"error": "Route inconnue"})
 
     def do_POST(self):
-        if self.path != "/print":
-            return _send(self, 404, {"error": "Route inconnue"})
-        data, err = _read_json(self)
-        if err:
-            return _send(self, 400, {"error": err})
-        blocks = data.get("blocks", [])
-        if not isinstance(blocks, list) or len(blocks) == 0:
-            return _send(self, 400, {"error": "Champ 'blocks' manquant ou vide"})
-        page, warnings = compose_page(blocks)
-        if page is None:
-            return _send(self, 422, {"error": "Aucun bloc n'a pu être rendu", "warnings": warnings})
-        ok, error = send_to_printer(page)
-        if not ok:
-            return _send(self, 503 if "occupée" in str(error) else 500, {"error": error, "warnings": warnings})
-        _send(self, 200, {"status": "printed", "blocks_rendered": len(blocks) - len(warnings), "warnings": warnings})
+        if self.path == "/print":
+            data, err = _read_json(self)
+            if err:
+                return _send(self, 400, {"error": err})
+            blocks = data.get("blocks", [])
+            if not isinstance(blocks, list) or len(blocks) == 0:
+                return _send(self, 400, {"error": "Champ 'blocks' manquant ou vide"})
+            page, warnings = compose_page(blocks)
+            if page is None:
+                return _send(self, 422, {"error": "Aucun bloc n'a pu être rendu", "warnings": warnings})
+            ok, error = send_to_printer(page)
+            if not ok:
+                return _send(self, 503 if "occupée" in str(error) else 500, {"error": error, "warnings": warnings})
+            _send(self, 200, {"status": "printed", "blocks_rendered": len(blocks) - len(warnings), "warnings": warnings})
+
+        elif self.path == "/print_todo":
+            data, err = _read_json(self)
+            if err:
+                return _send(self, 400, {"error": err})
+            entity_id = data.get("entity_id", "").strip()
+            title     = data.get("title", "Ma liste")
+            if not entity_id:
+                return _send(self, 400, {"error": "Champ 'entity_id' manquant"})
+            items, err = get_todo_items(entity_id)
+            if err:
+                return _send(self, 500, {"error": err})
+            if not items:
+                items = ["Aucun élément dans cette liste."]
+            blocks = [
+                {"type": "title",     "text": title, "align": "center"},
+                {"type": "separator"},
+                {"type": "text",      "text": f"{len(items)} élément(s)", "align": "center", "font_size": 20},
+                {"type": "separator"},
+                {"type": "list",      "items": items},
+            ]
+            page, warnings = compose_page(blocks)
+            if page is None:
+                return _send(self, 422, {"error": "Impossible de composer la page", "warnings": warnings})
+            ok, error = send_to_printer(page)
+            if not ok:
+                return _send(self, 503 if "occupée" in str(error) else 500, {"error": error, "warnings": warnings})
+            _send(self, 200, {"status": "printed", "items_count": len(items), "warnings": warnings})
+
+        else:
+            _send(self, 404, {"error": "Route inconnue"})
 
 def main():
     if not validate_mac(PRINTER_MAC):
