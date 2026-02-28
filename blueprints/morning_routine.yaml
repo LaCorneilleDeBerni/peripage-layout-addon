@@ -2,7 +2,8 @@ blueprint:
   name: "PeriPage — Routine du matin"
   description: >
     Imprime chaque matin une page personnalisée sur une imprimante thermique PeriPage.
-    Contenu : image aléatoire, phrase d'encouragement, rendez-vous du jour, phrase finale.
+    Contenu : titre avec prénom, date du jour, image aléatoire, phrase d'encouragement,
+    rendez-vous du jour, phrase finale.
 
     Prérequis :
       - Addon PeriPage Layout installé et configuré
@@ -11,6 +12,14 @@ blueprint:
       - Images nommées image_00001.png, image_00002.png... dans /config/www/images/
   domain: automation
   input:
+
+    prenom:
+      name: Prénom
+      description: Prénom affiché dans le titre (ex. Sophie → "Bonjour Sophie !").
+      default: "Sophie"
+      selector:
+        text:
+
     print_time:
       name: Heure d'impression
       description: Heure à laquelle la routine est imprimée chaque matin.
@@ -49,13 +58,6 @@ blueprint:
         entity:
           domain: input_select
 
-    closings:
-      name: Phrases finales
-      description: input_select contenant vos phrases finales affectueuses.
-      selector:
-        entity:
-          domain: input_select
-
     calendar_1:
       name: Calendrier 1
       description: Premier calendrier à inclure dans les RDV du jour.
@@ -79,12 +81,12 @@ blueprint:
         entity:
           domain: calendar
 
-    prenom:
-      name: Prénom
-      description: Prénom de la personne affiché dans le titre (ex. Sophie).
-      default: "Sophie"
+    closings:
+      name: Phrases finales
+      description: input_select contenant vos phrases finales affectueuses.
       selector:
-        text:
+        entity:
+          domain: input_select
 
     ha_ip:
       name: IP de Home Assistant
@@ -107,7 +109,10 @@ trigger:
     at: !input print_time
 
 variables:
+  prenom: !input prenom
   image_count_entity: !input image_count
+  image_folder: !input image_folder
+  image_prefix: !input image_prefix
   encouragements_entity: !input encouragements
   closings_entity: !input closings
   calendar_1_entity: !input calendar_1
@@ -118,9 +123,6 @@ variables:
 
   image_num: >
     {{ range(1, (states(image_count_entity) | int) + 1) | list | random }}
-  prenom: !input prenom
-  image_folder: !input image_folder
-  image_prefix: !input image_prefix
   image_url: >
     {{ 'http://' ~ ha_ip ~ ':8123/local/' ~ image_folder ~ '/' ~ image_prefix
        ~ (image_num | string).zfill(5) ~ '.png' }}
