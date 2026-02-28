@@ -189,7 +189,7 @@ L'image est automatiquement redimensionnée à 384px de large.
 
 ## Endpoint `/print_todo`
 
-R�cupère automatiquement les éléments non complétés d'une liste Todo HA et les imprime.
+Récupère automatiquement les éléments non complétés d'une liste Todo HA et les imprime.
 
 ```bash
 curl -X POST http://<IP_HOME_ASSISTANT>:8766/print_todo \
