@@ -24,7 +24,7 @@ Depuis le terminal SSH de Home Assistant :
 ```bash
 hcitool scan
 ```
-Il peut également être trouvé dans Paramêtre, bluetooth onglet Annonces sous la forme PeriPage_XXXX_BLE / PeriPage_XXXX
+Il peut également être trouvé dans Paramêtres, Bluetooth onglet Annonces sous la forme PeriPage_XXXX_BLE / PeriPage_XXXX
 
 ---
 
