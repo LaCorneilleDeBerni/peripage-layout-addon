@@ -443,12 +443,15 @@ def _read_json(handler) -> tuple:
         return None, f"Erreur lecture body : {e}"
 
 def _send(handler, code: int, payload: dict):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(code)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Content-Length", len(body))
-    handler.end_headers()
-    handler.wfile.write(body)
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        handler.send_response(code)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", len(body))
+        handler.end_headers()
+        handler.wfile.write(body)
+    except BrokenPipeError:
+        pass  # Le client a ferme la connexion avant la reponse — impression deja effectuee
 
 class LayoutHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
