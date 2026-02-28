@@ -3,7 +3,7 @@
 PeriPage Layout Addon — layout_service.py
 """
 
-import sys, json, logging, threading, base64, textwrap, urllib.request, io, os
+import sys, json, logging, threading, base64, textwrap, urllib.request, io, os, time
 import peripage as pp
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
@@ -312,15 +312,30 @@ MODEL_MAP = {
     "A40p": pp.PrinterType.A40p,
 }
 
-def _do_print(image: Image.Image) -> dict:
+def _classify_error(error_str: str) -> str:
+    """Retourne un message clair selon le type d'erreur Bluetooth."""
+    e = error_str.lower()
+    if "host is down" in e or "112" in e:
+        return "Imprimante éteinte ou hors de portée Bluetooth"
+    if "timeout" in e:
+        return "Timeout — imprimante éteinte, hors de portée ou occupée par une autre connexion"
+    if "busy" in e or "resource" in e or "16" in e:
+        return "Imprimante occupée — peut-être connectée à l'application mobile"
+    if "connection refused" in e or "111" in e:
+        return "Connexion refusée par l'imprimante"
+    if "no such device" in e or "19" in e:
+        return "Imprimante introuvable — vérifiez l'adresse MAC"
+    return f"Erreur Bluetooth : {error_str}"
+
+def _attempt_print(image: Image.Image) -> dict:
+    """Une tentative d'impression. Retourne success + error."""
     result = {"success": False, "error": None}
     def _thread():
         try:
             printer_type = MODEL_MAP.get(PRINTER_MODEL, pp.PrinterType.A6)
             printer = pp.Printer(PRINTER_MAC, printer_type)
             printer.connect()
-            log.info(f"Connecte via peripage-python, envoi image {image.size}")
-            # Convertir en RGB pour la librairie
+            log.info(f"Connecte, envoi image {image.size}...")
             img_rgb = image.convert("RGB")
             printer.printImage(img_rgb)
             printer.printBreak(100)
@@ -329,13 +344,56 @@ def _do_print(image: Image.Image) -> dict:
             log.info("Impression transmise avec succes.")
         except Exception as e:
             result["error"] = str(e)
-            log.error(f"Erreur Bluetooth : {e}")
     t = threading.Thread(target=_thread, daemon=True)
     t.start()
     t.join(timeout=30)
     if t.is_alive():
-        result["error"] = "Timeout Bluetooth (30s)"
+        result["error"] = "timeout"
     return result
+
+def _do_print(image: Image.Image) -> dict:
+    """Tente l'impression jusqu'a 2 fois. Notifie HA en cas d'echec."""
+    max_attempts = 2
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        log.info(f"Tentative {attempt}/{max_attempts}...")
+        result = _attempt_print(image)
+        if result["success"]:
+            return result
+        last_error = _classify_error(result["error"] or "inconnue")
+        log.warning(f"Tentative {attempt} echouee : {last_error}")
+        if attempt < max_attempts:
+            log.info("Nouvelle tentative dans 5 secondes...")
+            time.sleep(5)
+    # Toutes les tentatives ont échoué
+    log.error(f"Echec apres {max_attempts} tentatives : {last_error}")
+    fire_ha_notification(last_error)
+    return {"success": False, "error": last_error}
+
+def fire_ha_notification(error_msg: str):
+    """Envoie une notification persistante dans HA."""
+    try:
+        token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if not token:
+            return
+        payload = json.dumps({
+            "message": f"Impossible de se connecter à l'imprimante.\n{error_msg}",
+            "title": "PeriPage — Erreur d'impression",
+            "notification_id": "peripage_print_error"
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "http://supervisor/core/api/services/persistent_notification/create",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=5)
+        log.info("Notification HA envoyee.")
+    except Exception as e:
+        log.warning(f"Impossible d'envoyer la notification HA : {e}")
 
 def send_to_printer(image: Image.Image) -> tuple:
     global printer_busy
