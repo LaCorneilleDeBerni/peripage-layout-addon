@@ -24,7 +24,8 @@ Depuis le terminal SSH de Home Assistant :
 ```bash
 hcitool scan
 ```
-Il peut également être trouvé dans Paramêtres, Bluetooth onglet Annonces sous la forme PeriPage_XXXX_BLE / PeriPage_XXXX
+
+Elle est également visible dans **Paramètres → Bluetooth → Annonces** sous la forme `PeriPage_XXXX_BLE`.
 
 ---
 
@@ -41,17 +42,13 @@ Il peut également être trouvé dans Paramêtres, Bluetooth onglet Annonces sou
 
 ### Polices personnalisées
 
-Vous pouvez charger vos propres polices `.ttf` depuis une URL (ex: votre serveur HA) :
+Placez vos fichiers `.ttf` dans `/config/www/fonts/` puis déclarez-les dans la configuration :
 
 ```yaml
 custom_fonts:
-    - name: "NouvellePolice"
-    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/NouvellePolice.ttf"
-  - name: "NouvellePolice2"
-    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/NouvellePolice2.ttf"
+  - name: "MaPolice"
+    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/MaPolice.ttf"
 ```
-
-Placez vos fichiers `.ttf` dans `/config/www/fonts/` pour les rendre accessibles.
 
 ---
 
@@ -66,11 +63,32 @@ rest_command:
     method: POST
     content_type: "application/json"
     payload: "{{ payload }}"
+
+  peripage_print_todo:
+    url: "http://<IP_HOME_ASSISTANT>:8766/print_todo"
+    method: POST
+    content_type: "application/json"
+    payload: "{{ payload }}"
 ```
+
+Puis redémarrez Home Assistant.
+
+---
+
+## Endpoints API
+
+| Méthode | Route | Description |
+|---|---|---|
+| `POST` | `/print` | Compose et imprime une page par blocs |
+| `POST` | `/print_todo` | Récupère et imprime une liste Todo HA |
+| `GET` | `/health` | Statut de l'addon |
+| `GET` | `/status` | Imprimante occupée ou disponible |
 
 ---
 
 ## Référence des blocs
+
+> ⚠️ Dans un script HA, le payload JSON doit être sur **une seule ligne** avec `>-`. Le YAML multiligne casse le JSON.
 
 ### `text` — Texte
 
@@ -106,7 +124,7 @@ rest_command:
 }
 ```
 
-Identique à `text` mais avec bold et taille augmentée par défaut.
+Identique à `text` mais bold et taille augmentée par défaut.
 
 ---
 
@@ -169,39 +187,58 @@ L'image est automatiquement redimensionnée à 384px de large.
 
 ---
 
-## Endpoints API
+## Endpoint `/print_todo`
 
-| Méthode | Route | Description |
+R�cupère automatiquement les éléments non complétés d'une liste Todo HA et les imprime.
+
+```bash
+curl -X POST http://<IP_HOME_ASSISTANT>:8766/print_todo \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id": "todo.ma_liste", "title": "Ma liste"}'
+```
+
+| Champ | Description | Défaut |
 |---|---|---|
-| `POST` | `/print` | Compose et imprime une page |
-| `GET` | `/health` | Statut de l'addon |
-| `GET` | `/status` | Imprimante occupée ou disponible |
+| `entity_id` | Entité Todo HA | requis |
+| `title` | Titre affiché en haut de la page | `Ma liste` |
 
 ---
 
-## Exemple complet — Script HA
+## Blueprints disponibles
 
-> ⚠️ Dans un script HA, le payload JSON doit être sur **une seule ligne**. Le YAML multiligne casse le JSON.
+Les blueprints sont dans le dossier [`blueprints/`](./blueprints/) :
 
-```yaml
-alias: Test PeriPage
-sequence:
-  - service: rest_command.peripage_print
-    data:
-      payload: >-
-        {"blocks": [{"type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png"},{"type": "separator"},{"type": "title", "text": "Bonjour !","align": "center","font": "BirdsOfParadise"},{"type": "text","text": "Ceci est un test de l'addon PériPage","align": "center"},{"type": "separator"},{"type": "title","text": "Aujourd'hui"},{"type": "list","items": ["09:30 - RDV Médecin","14:00 - Travaille"]},{"type": "separator"},{"type": "text","text": "Tu es la meilleure 💙","align": "center"}]}
-mode: single
-```
+| Fichier | Description |
+|---|---|
+| `morning_routine.yaml` | Routine du matin : image aléatoire, encouragement, RDV, phrase finale |
+| `weather_print.yaml` | Récapitulatif météo du jour |
+| `todo_print.yaml` | Impression d'une liste Todo HA |
+
+---
+
+## Comportement en cas d'erreur
+
+- **2 tentatives** automatiques en cas d'échec Bluetooth
+- **5 secondes** d'attente entre les tentatives
+- **Notification persistante** dans HA après 2 échecs
+- Messages clairs dans les logs : imprimante éteinte, hors de portée, occupée...
 
 ---
 
 ## Test depuis le terminal
 
 ```bash
+# Texte simple
 curl -X POST http://<IP_HOME_ASSISTANT>:8766/print \
   -H "Content-Type: application/json" \
   -d '{"blocks": [{"type": "text", "text": "Test !"}]}'
 
+# Liste Todo
+curl -X POST http://<IP_HOME_ASSISTANT>:8766/print_todo \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id": "todo.ma_liste", "title": "Ma liste"}'
+
+# Statut
 curl http://<IP_HOME_ASSISTANT>:8766/health
 curl http://<IP_HOME_ASSISTANT>:8766/status
 ```
