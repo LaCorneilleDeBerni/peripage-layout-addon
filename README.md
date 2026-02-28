@@ -8,11 +8,22 @@ L'addon reçoit une liste de **blocs de contenu** en JSON, compose la page autom
 
 ## Installation
 
-1. Dans Home Assistant, allez dans **Settings > Add-ons > Add-on Store**
-2. Cliquez sur les **⋮** (menu) > **Repositories**
-3. Ajoutez : `https://github.com/LaCorneilleDeBerni/peripage-layout-addon`
-4. Installez **PeriPage Layout**
-5. Configurez votre adresse MAC et démarrez
+1. Dans HA : **Paramètres → Addons → Store → ⋮ → Dépôts**
+2. Ajoutez : `https://github.com/LaCorneilleDeBerni/peripage-layout-addon`
+3. Installez **PeriPage Layout**
+4. Configurez votre adresse MAC et démarrez
+
+> ⚠️ Après toute modification de la configuration, **redémarrez l'addon**.
+
+---
+
+## Trouver l'adresse MAC de votre imprimante
+
+Depuis le terminal SSH de Home Assistant :
+
+```bash
+hcitool scan
+```
 
 ---
 
@@ -22,46 +33,45 @@ L'addon reçoit une liste de **blocs de contenu** en JSON, compose la page autom
 |---|---|---|
 | `printer_mac` | Adresse MAC Bluetooth de l'imprimante | `XX:XX:XX:XX:XX:XX` |
 | `printer_model` | Modèle : `A6`, `A6p`, `A40`, `A40p` | `A6` |
-| `font` | Police : `DejaVu`, `DejaVuBold`, `Liberation`, `FreeSans` | `DejaVu` |
+| `font` | Police par défaut : `DejaVu`, `DejaVuBold`, `Liberation` | `DejaVu` |
 | `font_size` | Taille de police par défaut en pixels | `24` |
 | `port` | Port HTTP du service | `8766` |
+| `custom_fonts` | Polices personnalisées (nom + URL .ttf) | `[]` |
+
+### Polices personnalisées
+
+Vous pouvez charger vos propres polices `.ttf` depuis une URL (ex: votre serveur HA) :
+
+```yaml
+custom_fonts:
+  - name: "PastelTrunk"
+    url: "http://192.168.1.210:8123/local/fonts/PastelTrunk.ttf"
+  - name: "BirdsOfParadise"
+    url: "http://192.168.1.210:8123/local/fonts/BirdsOfParadise.ttf"
+```
+
+Placez vos fichiers `.ttf` dans `/config/www/fonts/` pour les rendre accessibles.
 
 ---
 
-## Utilisation
+## Intégration Home Assistant
 
-### rest_command (configuration.yaml)
+Ajoutez dans `/config/configuration.yaml` :
 
 ```yaml
 rest_command:
   peripage_print:
-    url: "http://YOUR_HA_IP:8766/print"
+    url: "http://192.168.1.210:8766/print"
     method: POST
     content_type: "application/json"
     payload: "{{ payload }}"
-```
-
-### Appel depuis un script HA
-
-```yaml
-- service: rest_command.peripage_print
-  data:
-    payload: >
-      {
-        "blocks": [
-          { "type": "title", "text": "Bonjour !" },
-          { "type": "separator" },
-          { "type": "text", "text": "Une chose à la fois.", "align": "center" },
-          { "type": "list", "items": ["09:30 - Médecin", "14:00 - Boulot"] }
-        ]
-      }
 ```
 
 ---
 
 ## Référence des blocs
 
-### `text` — Texte simple
+### `text` — Texte
 
 ```json
 {
@@ -69,7 +79,8 @@ rest_command:
   "text": "Votre texte ici",
   "align": "left",
   "font_size": 24,
-  "bold": false
+  "bold": false,
+  "font": "DejaVu"
 }
 ```
 
@@ -79,6 +90,7 @@ rest_command:
 | `align` | `left` / `center` / `right` | `left` |
 | `font_size` | entier (pixels) | config addon |
 | `bold` | `true` / `false` | `false` |
+| `font` | nom de police | config addon |
 
 ---
 
@@ -88,7 +100,8 @@ rest_command:
 {
   "type": "title",
   "text": "Mon titre",
-  "align": "center"
+  "align": "center",
+  "font": "DejaVuBold"
 }
 ```
 
@@ -96,14 +109,15 @@ Identique à `text` mais bold et taille augmentée par défaut.
 
 ---
 
-### `list` — Liste d'éléments
+### `list` — Liste
 
 ```json
 {
   "type": "list",
   "items": ["Premier élément", "Deuxième élément"],
   "bullet": "•",
-  "font_size": 22
+  "font_size": 22,
+  "font": "DejaVu"
 }
 ```
 
@@ -112,6 +126,7 @@ Identique à `text` mais bold et taille augmentée par défaut.
 | `items` | liste de strings | requis |
 | `bullet` | string | `•` |
 | `font_size` | entier | config addon |
+| `font` | nom de police | config addon |
 
 ---
 
@@ -123,7 +138,7 @@ Identique à `text` mais bold et taille augmentée par défaut.
 
 | Style | Rendu |
 |---|---|
-| `line` | Ligne horizontale fine (défaut) |
+| `line` | Ligne horizontale (défaut) |
 | `dotted` | Ligne pointillée |
 | `blank` | Espace vide |
 
@@ -134,15 +149,15 @@ Identique à `text` mais bold et taille augmentée par défaut.
 ```json
 {
   "type": "image_url",
-  "url": "http://192.168.1.10:8123/local/images/photo.png"
+  "url": "http://192.168.1.210:8123/local/images/photo.png"
 }
 ```
 
-L'image est automatiquement redimensionnée à la largeur d'impression (384px).
+L'image est automatiquement redimensionnée à 384px de large.
 
 ---
 
-### `image_b64` — Image encodée en base64
+### `image_b64` — Image en base64
 
 ```json
 {
@@ -159,45 +174,57 @@ L'image est automatiquement redimensionnée à la largeur d'impression (384px).
 |---|---|---|
 | `POST` | `/print` | Compose et imprime une page |
 | `GET` | `/health` | Statut de l'addon |
-| `GET` | `/status` | État de l'imprimante (occupée ou non) |
+| `GET` | `/status` | Imprimante occupée ou disponible |
 
-### Réponse `/print` succès
+---
 
-```json
-{
-  "status": "printed",
-  "blocks_rendered": 5,
-  "warnings": []
-}
-```
+## Exemple complet — Script HA
 
-### Réponse `/print` erreur
-
-```json
-{
-  "error": "Imprimante occupée",
-  "warnings": []
-}
+```yaml
+- service: rest_command.peripage_print
+  data:
+    payload: >
+      {
+        "blocks": [
+          { "type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png" },
+          { "type": "separator" },
+          { "type": "title", "text": "Bonjour !", "align": "center", "font": "BirdsOfParadise" },
+          { "type": "text", "text": "Une chose à la fois.", "align": "center" },
+          { "type": "separator" },
+          { "type": "title", "text": "Aujourd'hui" },
+          { "type": "list", "items": ["09:30 - Médecin", "14:00 - Boulot"] },
+          { "type": "separator" },
+          { "type": "text", "text": "Tu es la meilleure 💙", "align": "center" }
+        ]
+      }
 ```
 
 ---
 
-## Blueprints
+## Test depuis le terminal
 
-Des exemples complets de scripts et automations HA sont disponibles dans le dossier [`blueprints/`](./blueprints/) :
+```bash
+curl -X POST http://192.168.1.210:8766/print \
+  -H "Content-Type: application/json" \
+  -d '{"blocks": [{"type": "text", "text": "Test !"}]}'
 
-- **`morning_routine.yaml`** — Routine du matin : image aléatoire, phrase d'encouragement, RDV du jour, phrase finale
-- **`task_list.yaml`** — Impression d'une liste de tâches
+curl http://192.168.1.210:8766/health
+curl http://192.168.1.210:8766/status
+```
 
 ---
 
 ## Compatibilité
 
-Testé sur :
-- Raspberry Pi 4 (aarch64)
-- PeriPage A6
+Testé sur Raspberry Pi 4 (aarch64) avec PeriPage A6.
 
 ---
+
+## ⚠️ Disclaimer
+
+Ce projet a été réalisé avec l'aide de [Claude.ai](https://claude.ai). Créé pour aider une personne ayant un TDAH via des routines imprimées sur papier.
+
+Merci à [bitrate16](https://github.com/bitrate16) pour la librairie `peripage-python` et à [Elias Weingärtner](https://github.com/eliasweingaertner) pour le reverse engineering du protocole.
 
 ## Licence
 
