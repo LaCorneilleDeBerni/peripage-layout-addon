@@ -3,7 +3,7 @@
 PeriPage Layout Addon — layout_service.py
 """
 
-import sys, json, logging, threading, subprocess, base64, textwrap, urllib.request, io, os
+import sys, json, logging, threading, base64, textwrap, urllib.request, io, os
 import peripage as pp
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image, ImageDraw, ImageFont
@@ -305,29 +305,6 @@ def compose_page(blocks: list) -> tuple:
         y += img.height
     return page, warnings
 
-def _image_to_printer_bytes(image: Image.Image) -> bytes:
-    img = image.convert("L")
-    w, h = img.size
-    if w != PRINT_WIDTH:
-        new_h = int(h * PRINT_WIDTH / w)
-        img   = img.resize((PRINT_WIDTH, new_h), Image.LANCZOS)
-        w, h  = img.size
-    img = img.convert("1", dither=Image.FLOYDSTEINBERG)
-    BPL = PRINT_WIDTH // 8
-    xL, xH = BPL & 0xFF, (BPL >> 8) & 0xFF
-    yL, yH = h & 0xFF, (h >> 8) & 0xFF
-    data  = bytearray()
-    data += bytes([0x1B, 0x40])
-    data += bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
-    for y in range(h):
-        line_bytes = bytearray(BPL)
-        for x in range(PRINT_WIDTH):
-            if img.getpixel((x, y)) == 0:
-                line_bytes[x // 8] |= (0x80 >> (x % 8))
-        data += bytes(line_bytes)
-    data += bytes([0x1B, 0x64, 0x04])
-    return bytes(data)
-
 MODEL_MAP = {
     "A6":  pp.PrinterType.A6,
     "A6p": pp.PrinterType.A6p,
@@ -430,28 +407,12 @@ def main():
     log.info(f"PeriPage Layout Addon démarré — port {PORT}")
     log.info(f"Imprimante : {PRINTER_MODEL} @ {PRINTER_MAC}")
     load_custom_fonts()
-    log.info(f"Police : {FONT_NAME} {FONT_SIZE}px")
+    log.info(f"Police par défaut : {FONT_NAME} {FONT_SIZE}px")
+    # Avertir si une police système est absente
     for name in FONT_MAP:
-        path_regular = FONT_MAP.get(name, "")
-        path_bold    = FONT_MAP_BOLD.get(name, "")
-        ok_r = os.path.exists(path_regular)
-        ok_b = os.path.exists(path_bold)
-        if ok_r and ok_b:
-            log.info(f"  {name} -> OK (regular + bold)")
-        elif ok_r:
-            log.info(f"  {name} -> OK (regular uniquement, bold absent)")
-        elif ok_b:
-            log.info(f"  {name} -> OK (bold uniquement, regular absent)")
-        else:
-            log.warning(f"  {name} -> ABSENT")
-    log.info(f"Blocs supportés : {', '.join(BLOCK_RENDERERS.keys())}")
-
-    emoji_found = False
-    for path in EMOJI_FONT_PATHS:
-        if os.path.exists(path):
-            log.info(f"Police emoji trouvée : {path}")
-            emoji_found = True
-    if not emoji_found:
+        if not os.path.exists(FONT_MAP[name]) and not os.path.exists(FONT_MAP_BOLD.get(name, "")):
+            log.warning(f"Police '{name}' absente du système")
+    if not any(os.path.exists(p) for p in EMOJI_FONT_PATHS):
         log.warning("Police emoji introuvable — les emojis s'afficheront en carré")
 
     ThreadingHTTPServer.allow_reuse_address = True
