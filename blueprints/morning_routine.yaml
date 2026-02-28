@@ -34,7 +34,10 @@ blueprint:
 
     image_prefix:
       name: Préfixe des images
-      description: Préfixe du nom de fichier (ex. Maurice_ → Maurice_00001.png, image_ → image_00001.png).
+      description: >
+        Début du nom de vos fichiers images, avant le numéro.
+        Exemple : vos fichiers s'appellent Maurice_00001.png → entrez Maurice_
+        Exemple : vos fichiers s'appellent photo_00001.png → entrez photo_
       default: "image_"
       selector:
         text:
@@ -76,6 +79,13 @@ blueprint:
         entity:
           domain: calendar
 
+    prenom:
+      name: Prénom
+      description: Prénom de la personne affiché dans le titre (ex. Sophie).
+      default: "Sophie"
+      selector:
+        text:
+
     ha_ip:
       name: IP de Home Assistant
       description: Adresse IP locale de votre serveur HA (ex. 192.168.1.100).
@@ -108,6 +118,7 @@ variables:
 
   image_num: >
     {{ range(1, (states(image_count_entity) | int) + 1) | list | random }}
+  prenom: !input prenom
   image_folder: !input image_folder
   image_prefix: !input image_prefix
   image_url: >
@@ -150,6 +161,6 @@ action:
   - service: rest_command.peripage_print
     data:
       payload: >-
-        {"blocks": [{"type": "image_url", "url": "{{ image_url }}"},{"type": "separator"},{"type": "text", "text": "{{ encouragement }}", "align": "center", "font_size": 22},{"type": "separator"},{"type": "title", "text": "Aujourd'hui"},{"type": "list", "items": {{ appointments | tojson }}},{"type": "separator"},{"type": "text", "text": "{{ closing }}", "align": "center"}]}
+        {"blocks": [{"type": "title", "text": "Bonjour {{ prenom }} !", "align": "center"},{"type": "separator"},{"type": "text", "text": "{{ now().strftime('%A %d %B %Y') }}", "align": "center", "font_size": 20},{"type": "separator"},{"type": "image_url", "url": "{{ image_url }}"},{"type": "separator"},{"type": "text", "text": "{{ encouragement }}", "align": "center", "font_size": 22},{"type": "separator"},{"type": "title", "text": "Aujourd'hui"},{"type": "list", "items": {{ appointments | tojson }}},{"type": "separator"},{"type": "text", "text": "{{ closing }}", "align": "center"}]}
 
 mode: single
