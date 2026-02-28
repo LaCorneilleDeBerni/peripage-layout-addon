@@ -477,10 +477,9 @@ class LayoutHandler(BaseHTTPRequestHandler):
             page, warnings = compose_page(blocks)
             if page is None:
                 return _send(self, 422, {"error": "Aucun bloc n'a pu être rendu", "warnings": warnings})
-            ok, error = send_to_printer(page)
-            if not ok:
-                return _send(self, 503 if "occupée" in str(error) else 500, {"error": error, "warnings": warnings})
-            _send(self, 200, {"status": "printed", "blocks_rendered": len(blocks) - len(warnings), "warnings": warnings})
+            # Repondre immediatement a HA, imprimer en arriere-plan
+            _send(self, 200, {"status": "queued", "blocks_rendered": len(blocks) - len(warnings), "warnings": warnings})
+            threading.Thread(target=send_to_printer, args=(page,), daemon=True).start()
 
         elif self.path == "/print_todo":
             data, err = _read_json(self)
@@ -505,10 +504,9 @@ class LayoutHandler(BaseHTTPRequestHandler):
             page, warnings = compose_page(blocks)
             if page is None:
                 return _send(self, 422, {"error": "Impossible de composer la page", "warnings": warnings})
-            ok, error = send_to_printer(page)
-            if not ok:
-                return _send(self, 503 if "occupée" in str(error) else 500, {"error": error, "warnings": warnings})
-            _send(self, 200, {"status": "printed", "items_count": len(items), "warnings": warnings})
+            # Repondre immediatement a HA, imprimer en arriere-plan
+            _send(self, 200, {"status": "queued", "items_count": len(items), "warnings": warnings})
+            threading.Thread(target=send_to_printer, args=(page,), daemon=True).start()
 
         else:
             _send(self, 404, {"error": "Route inconnue"})
