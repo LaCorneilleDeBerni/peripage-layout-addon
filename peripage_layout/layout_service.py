@@ -131,10 +131,13 @@ def load_font(size: int, bold: bool = False, font_name: str = None) -> ImageFont
     log.warning(f"Police '{name}' introuvable, fallback PIL.")
     return ImageFont.load_default()
 
+_lh_cache = {}
 def line_height(font) -> int:
-    dummy = Image.new("L", (PRINT_WIDTH, 10))
-    draw  = ImageDraw.Draw(dummy)
-    return draw.textbbox((0, 0), "Ay", font=font)[3] + 4
+    key = id(font)
+    if key not in _lh_cache:
+        dummy = Image.new("L", (PRINT_WIDTH, 10))
+        _lh_cache[key] = ImageDraw.Draw(dummy).textbbox((0, 0), "Ay", font=font)[3] + 4
+    return _lh_cache[key]
 
 def measure_text(text: str, font, size: int) -> int:
     emoji_font = _get_emoji_font(size)
@@ -161,8 +164,8 @@ def draw_text_with_emoji(draw, pos, text: str, font, size: int, fill=0):
         x += bbox[2] - bbox[0]
     return x
 
-print_lock   = threading.Lock()
-printer_busy = False
+print_lock    = threading.Lock()
+printer_busy  = threading.Event()
 
 def validate_mac(mac: str) -> bool:
     if mac.lower() == "xx:xx:xx:xx:xx:xx":
@@ -198,7 +201,11 @@ def render_text(block: dict) -> Image.Image:
     font_name = block.get("font", None)
     font = load_font(font_size, bold, font_name)
     lh   = line_height(font)
-    max_chars = max(10, int(PRINT_WIDTH / (font_size * 0.58)))
+    # Mesure la largeur réelle d'un caractère moyen pour le word-wrap
+    _dummy_img  = Image.new("L", (1, 1))
+    _dummy_draw = ImageDraw.Draw(_dummy_img)
+    _avg_w = max(1, _dummy_draw.textbbox((0, 0), "abcdefghij", font=font)[2] // 10)
+    max_chars = max(10, PRINT_WIDTH // _avg_w)
     lines = []
     for paragraph in text.split("\n"):
         wrapped = textwrap.fill(paragraph, width=max_chars) if paragraph.strip() else ""
@@ -260,6 +267,8 @@ def render_image_url(block: dict) -> Image.Image:
     url = block.get("url", "").strip()
     if not url:
         raise ValueError("Bloc image_url : champ 'url' manquant")
+    if not url.startswith(("http://", "https://")):
+        raise ValueError(f"Bloc image_url : URL invalide (schéma non autorisé) : {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "PeriPage-Layout-Addon/1.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         data = resp.read()
@@ -401,18 +410,39 @@ def get_todo_items(entity_id: str) -> tuple:
     if not token:
         return [], "SUPERVISOR_TOKEN absent"
     try:
+        # Utilise l'API todo/get_items (compatible toutes intégrations modernes)
+        payload = json.dumps({"entity_id": entity_id, "status": "needs_action"}).encode("utf-8")
         req = urllib.request.Request(
-            f"http://supervisor/core/api/states/{entity_id}",
-            headers={"Authorization": f"Bearer {token}"}
+            "http://supervisor/core/api/services/todo/get_items",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
-            state = json.loads(resp.read())
+            data = json.loads(resp.read())
+        # La réponse est une liste de résultats de service
         items = []
-        for item in state.get("attributes", {}).get("items", []):
-            if item.get("status") != "completed":
+        for result in data:
+            for item in result.get("attributes", {}).get("items", []):
                 summary = item.get("summary", "").strip()
                 if summary:
                     items.append(summary)
+        if not items:
+            # Fallback sur /api/states si l'API service ne retourne rien
+            req2 = urllib.request.Request(
+                f"http://supervisor/core/api/states/{entity_id}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            with urllib.request.urlopen(req2, timeout=5) as resp2:
+                state = json.loads(resp2.read())
+            for item in state.get("attributes", {}).get("items", []):
+                if item.get("status") != "completed":
+                    summary = item.get("summary", "").strip()
+                    if summary:
+                        items.append(summary)
         return items, None
     except Exception as e:
         return [], f"Erreur API HA : {e}"
@@ -422,12 +452,12 @@ def send_to_printer(image: Image.Image) -> tuple:
     global printer_busy
     if not print_lock.acquire(blocking=False):
         return False, "Imprimante occupée"
-    printer_busy = True
+    printer_busy.set()
     try:
         result = _do_print(image)
         return result["success"], result.get("error")
     finally:
-        printer_busy = False
+        printer_busy.clear()
         try: print_lock.release()
         except RuntimeError: pass
 
@@ -435,7 +465,7 @@ def _read_json(handler) -> tuple:
     try:
         length = int(handler.headers.get("Content-Length", 0))
         raw    = handler.rfile.read(length)
-        log.info(f"BODY RECU ({length} bytes): {raw[:200]}")
+        log.debug(f"BODY RECU ({length} bytes): {raw[:200]}")
         return json.loads(raw), None
     except json.JSONDecodeError as e:
         return None, f"JSON invalide : {e}"
@@ -462,7 +492,7 @@ class LayoutHandler(BaseHTTPRequestHandler):
             ok = validate_mac(PRINTER_MAC)
             _send(self, 200 if ok else 503, {"status": "ok" if ok else "error", "mac": PRINTER_MAC, "model": PRINTER_MODEL, "font": FONT_NAME, "font_size": FONT_SIZE, "port": PORT, "supported_blocks": list(BLOCK_RENDERERS.keys()), "endpoints": ["/print", "/print_todo", "/health", "/status"]})
         elif self.path == "/status":
-            _send(self, 200, {"busy": printer_busy, "mac": PRINTER_MAC})
+            _send(self, 200, {"busy": printer_busy.is_set(), "mac": PRINTER_MAC})
         else:
             _send(self, 404, {"error": "Route inconnue"})
 
