@@ -180,23 +180,13 @@ L'image est automatiquement redimensionnée à 384px de large.
 
 ## Exemple complet — Script HA
 
+> ⚠️ Dans un script HA, le payload JSON doit être sur **une seule ligne**. Le YAML multiligne casse le JSON.
+
 ```yaml
 - service: rest_command.peripage_print
   data:
-    payload: >
-      {
-        "blocks": [
-          { "type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png" },
-          { "type": "separator" },
-          { "type": "title", "text": "Bonjour !", "align": "center", "font": "BirdsOfParadise" },
-          { "type": "text", "text": "Une chose à la fois.", "align": "center" },
-          { "type": "separator" },
-          { "type": "title", "text": "Aujourd'hui" },
-          { "type": "list", "items": ["09:30 - Médecin", "14:00 - Boulot"] },
-          { "type": "separator" },
-          { "type": "text", "text": "Tu es la meilleure 💙", "align": "center" }
-        ]
-      }
+    payload: >-
+      {"blocks": [{"type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png"},{"type": "separator"},{"type": "title", "text": "Bonjour !","align": "center","font": "BirdsOfParadise"},{"type": "text","text": "Une chose à la fois.","align": "center"},{"type": "separator"},{"type": "title","text": "Aujourd'hui"},{"type": "list","items": ["09:30 - Médecin","14:00 - Boulot"]},{"type": "separator"},{"type": "text","text": "Tu es la meilleure 💙","align": "center"}]}
 ```
 
 ---
