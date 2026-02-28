@@ -20,10 +20,24 @@ blueprint:
 
     image_count:
       name: Nombre d'images
-      description: Nombre total d'images disponibles dans /config/www/images/.
+      description: Nombre total d'images disponibles dans votre dossier.
       selector:
         entity:
           domain: input_number
+
+    image_folder:
+      name: Dossier des images
+      description: Chemin relatif depuis /local/ (ex. Maurice, images, photos).
+      default: "images"
+      selector:
+        text:
+
+    image_prefix:
+      name: Préfixe des images
+      description: Préfixe du nom de fichier (ex. Maurice_ → Maurice_00001.png, image_ → image_00001.png).
+      default: "image_"
+      selector:
+        text:
 
     encouragements:
       name: Phrases d'encouragement
@@ -94,8 +108,10 @@ variables:
 
   image_num: >
     {{ range(1, (states(image_count_entity) | int) + 1) | list | random }}
+  image_folder: !input image_folder
+  image_prefix: !input image_prefix
   image_url: >
-    {{ 'http://' ~ ha_ip ~ ':8123/local/images/image_'
+    {{ 'http://' ~ ha_ip ~ ':8123/local/' ~ image_folder ~ '/' ~ image_prefix
        ~ (image_num | string).zfill(5) ~ '.png' }}
 
   encouragement: >
