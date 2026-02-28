@@ -45,9 +45,9 @@ Vous pouvez charger vos propres polices `.ttf` depuis une URL (ex: votre serveur
 ```yaml
 custom_fonts:
   - name: "PastelTrunk"
-    url: "http://192.168.1.210:8123/local/fonts/PastelTrunk.ttf"
+    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/PastelTrunk.ttf"
   - name: "BirdsOfParadise"
-    url: "http://192.168.1.210:8123/local/fonts/BirdsOfParadise.ttf"
+    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/BirdsOfParadise.ttf"
 ```
 
 Placez vos fichiers `.ttf` dans `/config/www/fonts/` pour les rendre accessibles.
@@ -61,7 +61,7 @@ Ajoutez dans `/config/configuration.yaml` :
 ```yaml
 rest_command:
   peripage_print:
-    url: "http://192.168.1.210:8766/print"
+    url: "http://<IP_HOME_ASSISTANT>:8766/print"
     method: POST
     content_type: "application/json"
     payload: "{{ payload }}"
@@ -149,7 +149,7 @@ Identique à `text` mais bold et taille augmentée par défaut.
 ```json
 {
   "type": "image_url",
-  "url": "http://192.168.1.210:8123/local/images/photo.png"
+  "url": "http://<IP_HOME_ASSISTANT>:8123/local/images/photo.png"
 }
 ```
 
@@ -194,12 +194,12 @@ L'image est automatiquement redimensionnée à 384px de large.
 ## Test depuis le terminal
 
 ```bash
-curl -X POST http://192.168.1.210:8766/print \
+curl -X POST http://<IP_HOME_ASSISTANT>:8766/print \
   -H "Content-Type: application/json" \
   -d '{"blocks": [{"type": "text", "text": "Test !"}]}'
 
-curl http://192.168.1.210:8766/health
-curl http://192.168.1.210:8766/status
+curl http://<IP_HOME_ASSISTANT>:8766/health
+curl http://<IP_HOME_ASSISTANT>:8766/status
 ```
 
 ---
