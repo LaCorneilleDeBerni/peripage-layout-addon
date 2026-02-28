@@ -29,11 +29,13 @@ RUN wget -q "https://github.com/googlefonts/noto-emoji/raw/v2.034/fonts/NotoEmoj
     && echo "Police emoji installée OK" \
     || echo "Téléchargement échoué"
 
+# Vérifier que les polices système sont bien installées
+RUN test -f /usr/share/fonts/dejavu/DejaVuSans.ttf || (echo "ERREUR: DejaVuSans.ttf absent" && exit 1)
+RUN test -f /usr/share/fonts/liberation/LiberationSans-Regular.ttf || (echo "ERREUR: LiberationSans-Regular.ttf absent" && exit 1)
+
 COPY run.sh /
 COPY layout_service.py /
 
 RUN chmod +x /run.sh
-
-CMD ["/run.sh"]
 
 CMD ["/run.sh"]
