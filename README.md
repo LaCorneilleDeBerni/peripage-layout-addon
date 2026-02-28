@@ -24,6 +24,7 @@ Depuis le terminal SSH de Home Assistant :
 ```bash
 hcitool scan
 ```
+Il peut également être trouvé dans Paramêtre, bluetooth onglet Annonces sous la forme PeriPage_XXXX_BLE / PeriPage_XXXX
 
 ---
 
@@ -105,7 +106,7 @@ rest_command:
 }
 ```
 
-Identique à `text` mais bold et taille augmentée par défaut.
+Identique à `text` mais avec bold et taille augmentée par défaut.
 
 ---
 
@@ -183,10 +184,13 @@ L'image est automatiquement redimensionnée à 384px de large.
 > ⚠️ Dans un script HA, le payload JSON doit être sur **une seule ligne**. Le YAML multiligne casse le JSON.
 
 ```yaml
-- service: rest_command.peripage_print
-  data:
-    payload: >-
-      {"blocks": [{"type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png"},{"type": "separator"},{"type": "title", "text": "Bonjour !","align": "center","font": "BirdsOfParadise"},{"type": "text","text": "Une chose à la fois.","align": "center"},{"type": "separator"},{"type": "title","text": "Aujourd'hui"},{"type": "list","items": ["09:30 - Médecin","14:00 - Boulot"]},{"type": "separator"},{"type": "text","text": "Tu es la meilleure 💙","align": "center"}]}
+alias: Test PeriPage
+sequence:
+  - service: rest_command.peripage_print
+    data:
+      payload: >-
+        {"blocks": [{"type": "image_url", "url": "http://192.168.1.210:8123/local/Maurice/Maurice_00001.png"},{"type": "separator"},{"type": "title", "text": "Bonjour !","align": "center","font": "BirdsOfParadise"},{"type": "text","text": "Ceci est un test de l'addon PériPage","align": "center"},{"type": "separator"},{"type": "title","text": "Aujourd'hui"},{"type": "list","items": ["09:30 - RDV Médecin","14:00 - Travaille"]},{"type": "separator"},{"type": "text","text": "Tu es la meilleure 💙","align": "center"}]}
+mode: single
 ```
 
 ---
