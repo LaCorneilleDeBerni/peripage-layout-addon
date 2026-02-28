@@ -45,10 +45,10 @@ Vous pouvez charger vos propres polices `.ttf` depuis une URL (ex: votre serveur
 
 ```yaml
 custom_fonts:
-  - name: "PastelTrunk"
-    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/PastelTrunk.ttf"
-  - name: "BirdsOfParadise"
-    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/BirdsOfParadise.ttf"
+    - name: "NouvelPolice"
+    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/NouvelPolice.ttf"
+  - name: "NouvelPolice2"
+    url: "http://<IP_HOME_ASSISTANT>:8123/local/fonts/NouvelPolice2.ttf"
 ```
 
 Placez vos fichiers `.ttf` dans `/config/www/fonts/` pour les rendre accessibles.
